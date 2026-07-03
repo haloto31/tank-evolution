@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tank Evolution</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main id="game-shell">
+      <canvas id="game" width="1280" height="720" aria-label="Tank Evolution game"></canvas>
+      <div id="mobile-controls" aria-hidden="true">
+        <div id="move-stick" class="touch-stick"><span></span></div>
+        <button id="fire-touch" type="button">FIRE</button>
+      </div>
+
+      <section id="start-screen" class="overlay">
+        <div class="start-panel">
+          <p class="eyebrow">Choose your tank</p>
+          <h1>Tank Evolution</h1>
+          <div class="mode-grid" aria-label="Choose game mode">
+            <button class="mode-card active" type="button" data-mode="evolution">
+              <strong>Normal War</strong>
+              <span>Tanks, bosses, allies, infantry squads</span>
+            </button>
+            <button class="mode-card" type="button" data-mode="infantryArmy">
+              <strong>Infantry Army</strong>
+              <span>Fight waves of AK infantry as your tank</span>
+            </button>
+          </div>
+          <div class="tank-grid" id="tank-grid"></div>
+          <p class="hint">Move with WASD or arrow keys. Aim with the mouse. Click or hold Space to fire. Press Esc to pause.</p>
+        </div>
+      </section>
+
+      <section id="level-screen" class="overlay hidden">
+        <div class="upgrade-panel">
+          <p class="eyebrow">Level up</p>
+          <h2>Pick one upgrade</h2>
+          <div class="upgrade-grid" id="upgrade-grid"></div>
+        </div>
+      </section>
+
+      <section id="pause-screen" class="overlay hidden compact">
+        <div class="pause-panel">
+          <h2>Paused</h2>
+          <button id="resume-button">Resume</button>
+        </div>
+      </section>
+
+      <section id="game-over-screen" class="overlay hidden compact">
+        <div class="pause-panel">
+          <p class="eyebrow">Your tank is scrap</p>
+          <h2>Game Over</h2>
+          <p id="final-stats"></p>
+          <button id="restart-button">Play Again</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="game.js"></script>
+  </body>
+</html>
