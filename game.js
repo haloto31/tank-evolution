@@ -66,6 +66,10 @@ const TAZER_CANNON_COUNT = 6;
 const TAZER_CANNON_DURATION = 3;
 const TAZER_CANNON_DAMAGE_MULTIPLIER = 50;
 const TAZER_CANNON_RADIUS = 96;
+const TAZER_CANNON_WAVE_DURATION = 0.9;
+const TAZER_CANNON_WAVE_RADIUS = 520;
+const TAZER_CANNON_WAVE_WIDTH = 56;
+const TAZER_CANNON_WAVE_DAMAGE = 100;
 const TAZER_ENERGY_DRAIN = 0.34;
 const TAZER_ENERGY_REGEN = 0.26;
 const RAILGUN_DPS = 95;
@@ -203,6 +207,7 @@ const nukes = [];
 const gammaStorms = [];
 const tazerEndStorms = [];
 const tazerCannonTraps = [];
+const tazerCannonWaves = [];
 
 const multiplayer = {
   enabled: location.protocol === "http:" || location.protocol === "https:",
@@ -1228,6 +1233,7 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
   gammaStorms.length = 0;
   tazerEndStorms.length = 0;
   tazerCannonTraps.length = 0;
+  tazerCannonWaves.length = 0;
   spawnCarry = 0;
   nextEnemyId = 1;
   infantryArmySpawned = 0;
@@ -1586,9 +1592,14 @@ function tazerStormPenaltyActive() {
   return player.tankKey === "tazer" && tazerEndStorms.length > 0;
 }
 
+function tazerCannonWavePenaltyActive() {
+  return player.tankKey === "tazer" && tazerCannonWaves.length > 0;
+}
+
 function playerIncomingDamage(amount) {
   const stormPenalty = tazerStormPenaltyActive() ? 3 : 1;
-  return amount * (player.perks.damageTakenMult || 1) * stormPenalty;
+  const cannonWavePenalty = tazerCannonWavePenaltyActive() ? 5 : 1;
+  return amount * (player.perks.damageTakenMult || 1) * stormPenalty * cannonWavePenalty;
 }
 
 function dragonBurnDamage() {
@@ -2335,12 +2346,44 @@ function spawnTazerCannonTrap() {
   return true;
 }
 
+function triggerTazerCannonWave(trap) {
+  const wave = {
+    x: trap.x,
+    y: trap.y,
+    age: 0,
+    life: TAZER_CANNON_WAVE_DURATION,
+    max: TAZER_CANNON_WAVE_DURATION,
+    radius: 0,
+    hitIds: new Set(),
+  };
+  tazerCannonWaves.push(wave);
+  for (let i = 0; i < 14; i += 1) {
+    const angle = (i / 14) * TAU;
+    lightning.push({
+      x1: wave.x,
+      y1: wave.y,
+      x2: wave.x + Math.cos(angle) * 170,
+      y2: wave.y + Math.sin(angle) * 170,
+      life: 0.2,
+      max: 0.2,
+      color: "#fff06d",
+      large: true,
+      width: 5,
+      burst: 52,
+    });
+  }
+  if (lightning.length > MAX_LIGHTNING) lightning.splice(0, lightning.length - MAX_LIGHTNING);
+  addSpark(wave.x, wave.y, "#fff06d", 16);
+  camera.shake = Math.max(camera.shake, 9);
+}
+
 function updateTazerCannonTraps(dt) {
   for (let i = tazerCannonTraps.length - 1; i >= 0; i -= 1) {
     const trap = tazerCannonTraps[i];
     trap.life -= dt;
     const target = enemies.find((enemy) => enemy.id === trap.targetId && enemy.team !== "ally");
     if (!target || target.hp <= 0 || trap.life <= 0) {
+      triggerTazerCannonWave(trap);
       tazerCannonTraps.splice(i, 1);
       continue;
     }
@@ -2376,6 +2419,31 @@ function updateTazerCannonTraps(dt) {
       if (lightning.length > MAX_LIGHTNING) lightning.splice(0, lightning.length - MAX_LIGHTNING);
       addSpark(target.x, target.y, "#fff06d", 2);
     }
+  }
+}
+
+function updateTazerCannonWaves(dt) {
+  for (let i = tazerCannonWaves.length - 1; i >= 0; i -= 1) {
+    const wave = tazerCannonWaves[i];
+    const previousRadius = wave.radius || 0;
+    wave.age += dt;
+    wave.life -= dt;
+    const progress = clamp(wave.age / wave.max, 0, 1);
+    wave.radius = TAZER_CANNON_WAVE_RADIUS * (1 - (1 - progress) * (1 - progress));
+    enemies.forEach((enemy) => {
+      if (enemy.team === "ally" || enemy.hp <= 0 || wave.hitIds.has(enemy.id)) return;
+      const d = Math.hypot(enemy.x - wave.x, enemy.y - wave.y);
+      const frontReached = d - enemy.r <= wave.radius + TAZER_CANNON_WAVE_WIDTH * 0.5;
+      const notBehind = d + enemy.r >= previousRadius - TAZER_CANNON_WAVE_WIDTH;
+      if (!frontReached || !notBehind) return;
+      const damage = enemyIncomingDamage(enemy, playerDamage(TAZER_CANNON_WAVE_DAMAGE, enemy));
+      enemy.hp -= damage;
+      enemy.stun = Math.max(enemy.stun || 0, 0.35);
+      markHit(enemy, damage, { x: wave.x, y: wave.y, kind: "tazerCannonWave", noKnockback: true });
+      wave.hitIds.add(enemy.id);
+      addSpark(enemy.x, enemy.y, "#fff06d", 3);
+    });
+    if (wave.life <= 0) tazerCannonWaves.splice(i, 1);
   }
 }
 
@@ -5846,6 +5914,7 @@ function updateParticles(dt) {
     if (storm.strikesLeft <= 0) tazerEndStorms.splice(i, 1);
   }
   updateTazerCannonTraps(dt);
+  updateTazerCannonWaves(dt);
   if (flames.length > MAX_FLAMES) flames.splice(0, flames.length - MAX_FLAMES);
   for (let i = flames.length - 1; i >= 0; i -= 1) {
     flames[i].life -= dt;
@@ -5910,6 +5979,9 @@ function draw() {
   });
   tazerCannonTraps.forEach((trap) => {
     if (onScreen(trap, TAZER_CANNON_RADIUS + 160)) drawTazerCannonTrap(trap);
+  });
+  tazerCannonWaves.forEach((wave) => {
+    if (onScreen(wave, TAZER_CANNON_WAVE_RADIUS + 120)) drawTazerCannonWave(wave);
   });
   lightning.forEach(drawLightning);
   enemies.forEach((enemy) => {
@@ -7301,6 +7373,30 @@ function drawTazerCannonTrap(trap) {
     ctx.fill();
     ctx.restore();
   }
+  ctx.restore();
+}
+
+function drawTazerCannonWave(wave) {
+  const alpha = clamp(wave.life / wave.max, 0, 1);
+  const radius = wave.radius || 0;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  const grad = ctx.createRadialGradient(wave.x, wave.y, Math.max(1, radius - TAZER_CANNON_WAVE_WIDTH), wave.x, wave.y, radius + TAZER_CANNON_WAVE_WIDTH);
+  grad.addColorStop(0, "rgba(255,240,109,0)");
+  grad.addColorStop(0.45, "rgba(255,240,109,0.12)");
+  grad.addColorStop(0.62, "rgba(234,255,255,0.78)");
+  grad.addColorStop(1, "rgba(255,240,109,0)");
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = TAZER_CANNON_WAVE_WIDTH;
+  ctx.beginPath();
+  ctx.arc(wave.x, wave.y, radius, 0, TAU);
+  ctx.stroke();
+
+  ctx.strokeStyle = `rgba(255,255,255,${0.85 * alpha})`;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(wave.x, wave.y, radius, 0, TAU);
+  ctx.stroke();
   ctx.restore();
 }
 
