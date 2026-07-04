@@ -119,6 +119,7 @@ const bossSpawnedLevels = new Set();
 let selectedGameMode = "evolution";
 let activeGameMode = "evolution";
 let infantryArmySpawned = 0;
+let hudHidden = false;
 
 const world = {
   w: 2600,
@@ -6047,7 +6048,7 @@ function draw() {
     if (onScreen(spark, 80)) drawSpark(spark);
   });
   ctx.restore();
-  drawHud();
+  if (!hudHidden) drawHud();
 }
 
 function drawRemoteMultiplayer() {
@@ -7655,6 +7656,11 @@ function loop(now) {
 window.addEventListener("resize", resize);
 window.addEventListener("keydown", (event) => {
   const key = event.key.toLowerCase();
+  if (key === "tab") {
+    event.preventDefault();
+    hudHidden = !hudHidden;
+    return;
+  }
   keys.add(key);
   if ([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) event.preventDefault();
   if (key === "escape") {
