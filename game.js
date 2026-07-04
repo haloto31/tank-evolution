@@ -64,7 +64,7 @@ const TAZER_MINI_DAMAGE = 20;
 const TAZER_CANNON_COOLDOWN = 65;
 const TAZER_CANNON_COUNT = 6;
 const TAZER_CANNON_DURATION = 3;
-const TAZER_CANNON_DPS = 500;
+const TAZER_CANNON_DAMAGE_MULTIPLIER = 5;
 const TAZER_CANNON_RADIUS = 96;
 const TAZER_ENERGY_DRAIN = 0.34;
 const TAZER_ENERGY_REGEN = 0.26;
@@ -2350,7 +2350,8 @@ function updateTazerCannonTraps(dt) {
     target.stun = Math.max(target.stun || 0, 0.14);
     target.knockVx = 0;
     target.knockVy = 0;
-    const damage = enemyIncomingDamage(target, playerDamage(TAZER_CANNON_DPS * dt, target));
+    const cageDps = (TAZER_CHAIN_DAMAGE * player.mods.shellDamage * TAZER_CANNON_DAMAGE_MULTIPLIER) / TAZER_CANNON_DURATION;
+    const damage = enemyIncomingDamage(target, playerDamage(cageDps * dt, target));
     target.hp -= damage;
     markHit(target, damage, { x: trap.x, y: trap.y, kind: "tazerCannon", noKnockback: true });
 
