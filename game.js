@@ -2366,19 +2366,36 @@ function triggerTazerCannonWave(trap) {
     hitIds: new Set(),
   };
   tazerCannonWaves.push(wave);
+  lightning.push({
+    x1: wave.x + (Math.random() - 0.5) * 48,
+    y1: Math.max(0, wave.y - 560),
+    x2: wave.x,
+    y2: wave.y,
+    life: 0.38,
+    max: 0.38,
+    color: "#fff06d",
+    glowColor: "rgba(255,240,109,0.38)",
+    glowFade: "rgba(255,240,109,0)",
+    large: true,
+    skyStrike: true,
+    width: 16,
+    burst: 92,
+  });
   for (let i = 0; i < 14; i += 1) {
     const angle = (i / 14) * TAU;
     lightning.push({
       x1: wave.x,
       y1: wave.y,
-      x2: wave.x + Math.cos(angle) * 170,
-      y2: wave.y + Math.sin(angle) * 170,
-      life: 0.2,
-      max: 0.2,
+      x2: wave.x + Math.cos(angle) * 230,
+      y2: wave.y + Math.sin(angle) * 230,
+      life: 0.3,
+      max: 0.3,
       color: "#fff06d",
+      glowColor: "rgba(255,240,109,0.34)",
+      glowFade: "rgba(255,240,109,0)",
       large: true,
-      width: 5,
-      burst: 52,
+      width: 10,
+      burst: 62,
     });
   }
   if (lightning.length > MAX_LIGHTNING) lightning.splice(0, lightning.length - MAX_LIGHTNING);
@@ -7204,6 +7221,8 @@ function drawLightning(bolt) {
   const segments = large ? 9 : 5;
   const jitter = large ? 42 : 18;
   const color = bolt.color || "#88f7ff";
+  const glowColor = bolt.glowColor || "rgba(77,184,255,0.34)";
+  const glowFade = bolt.glowFade || "rgba(77,184,255,0)";
   const width = bolt.width || (large ? 10 : 3);
   const strikeRadius = (bolt.burst || 38) * (1 - alpha * 0.15);
   ctx.save();
@@ -7211,8 +7230,8 @@ function drawLightning(bolt) {
   if (large) {
     const grad = ctx.createRadialGradient(bolt.x2, bolt.y2, 0, bolt.x2, bolt.y2, strikeRadius * 1.9);
     grad.addColorStop(0, "rgba(255,255,255,0.72)");
-    grad.addColorStop(0.28, "rgba(77,184,255,0.34)");
-    grad.addColorStop(1, "rgba(77,184,255,0)");
+    grad.addColorStop(0.28, glowColor);
+    grad.addColorStop(1, glowFade);
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(bolt.x2, bolt.y2, strikeRadius * 1.9, 0, TAU);
