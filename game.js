@@ -113,6 +113,9 @@ const DEFAULT_BULLET_DAMAGE = 7.5;
 const BOSS_LEVEL_INTERVAL = 10;
 const LEVEL_TEN_BOSS_HP_MULTIPLIER = 100;
 const LEVEL_TEN_BOSS_DAMAGE_MULTIPLIER = 50;
+const FINAL_BOSS_LEVEL = 20;
+const FINAL_BOSS_DAMAGE_MULTIPLIER = 1 / 3;
+const FINAL_BOSS_RELOAD = 5;
 const MAX_EVOLUTION_STAGE = 30;
 const MAX_SPARKS = 24;
 const MAX_LIGHTNING = 24;
@@ -3250,7 +3253,16 @@ function spawnInfantryArmySoldier(options = {}) {
 }
 
 function spawnBoss(level) {
-  const loadout = chooseSpawnLoadout(level);
+  const isFinalBoss = level === FINAL_BOSS_LEVEL;
+  const loadout = isFinalBoss
+    ? {
+        tankKey: "default",
+        buildName: "Final Ultra Tank",
+        color: "#5b2d2d",
+        accent: "#ffef88",
+        ...createVariantLoadout("defaultUltra", level),
+      }
+    : chooseSpawnLoadout(level);
   const isLevelTenBoss = level === BOSS_LEVEL_INTERVAL;
   const bossHp = isLevelTenBoss
     ? Math.max(1, Math.round(player.maxHp * LEVEL_TEN_BOSS_HP_MULTIPLIER))
@@ -3263,13 +3275,14 @@ function spawnBoss(level) {
     id: nextEnemyId,
     team: "enemy",
     boss: true,
+    finalBoss: isFinalBoss,
     tankKey: loadout.tankKey,
-    buildName: isLevelTenBoss ? `Level 10 Boss ${loadout.buildName}` : `Boss ${loadout.buildName}`,
+    buildName: isFinalBoss ? "Wave 20 Final Boss Ultra Tank" : isLevelTenBoss ? `Level 10 Boss ${loadout.buildName}` : `Boss ${loadout.buildName}`,
     color: "#5b2d2d",
     accent: loadout.accent,
     mods: bossMods,
     level,
-    damageMult: isLevelTenBoss ? LEVEL_TEN_BOSS_DAMAGE_MULTIPLIER : 1,
+    damageMult: isFinalBoss ? FINAL_BOSS_DAMAGE_MULTIPLIER : isLevelTenBoss ? LEVEL_TEN_BOSS_DAMAGE_MULTIPLIER : 1,
     x,
     y,
     r: 38,
@@ -3280,6 +3293,7 @@ function spawnBoss(level) {
     strategy: enemyStrategyFor(loadout, true),
     orbitSide: Math.random() < 0.5 ? -1 : 1,
     surroundAngle: nextEnemyId * 2.399963229728653 + Math.random() * 0.3,
+    fixedReload: isFinalBoss ? FINAL_BOSS_RELOAD : null,
     cooldown: 0.45,
     burn: 0,
     burnDps: 0,
@@ -6024,7 +6038,9 @@ function updateEnemies(dt) {
     } else if (enemy.tankKey !== "flame" && enemy.cooldown <= 0 && canShoot) {
       enemyFire(enemy, enemyTarget);
       enemy.cooldown =
-        enemy.tankKey === "juggernaut"
+        enemy.fixedReload
+          ? enemy.fixedReload
+          : enemy.tankKey === "juggernaut"
           ? Math.max(1.75, 3.7 - enemy.level * 0.04) + Math.random() * 0.8
           : enemy.tankKey === "dragonTamer"
             ? Math.max(5.5, 9.5 - enemy.level * 0.08) + Math.random() * 1.4
