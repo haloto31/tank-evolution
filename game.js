@@ -70,6 +70,8 @@ const TAZER_CANNON_WAVE_DURATION = 0.9;
 const TAZER_CANNON_WAVE_RADIUS = 520;
 const TAZER_CANNON_WAVE_WIDTH = 56;
 const TAZER_CANNON_WAVE_DAMAGE = 100;
+const TAZER_CANNON_WAVE_LAYERS = 7;
+const TAZER_CANNON_WAVE_STRIKES = 8;
 const TAZER_GUARD_COOLDOWN = 45;
 const TAZER_GUARD_DURATION = 10;
 const TAZER_GUARD_DAMAGE_MULTIPLIER = 0.4;
@@ -2371,6 +2373,8 @@ function triggerTazerCannonWave(trap) {
     max: TAZER_CANNON_WAVE_DURATION,
     radius: 0,
     hitIds: new Set(),
+    layerIndex: 0,
+    rings: [],
   };
   tazerCannonWaves.push(wave);
   lightning.push({
@@ -2388,26 +2392,38 @@ function triggerTazerCannonWave(trap) {
     width: 16,
     burst: 92,
   });
-  for (let i = 0; i < 14; i += 1) {
-    const angle = (i / 14) * TAU;
+  emitTazerCannonWaveLayer(wave, TAZER_CANNON_WAVE_RADIUS / TAZER_CANNON_WAVE_LAYERS);
+  wave.layerIndex = 1;
+  if (lightning.length > MAX_LIGHTNING) lightning.splice(0, lightning.length - MAX_LIGHTNING);
+  addSpark(wave.x, wave.y, "#fff06d", 16);
+  camera.shake = Math.max(camera.shake, 9);
+}
+
+function emitTazerCannonWaveLayer(wave, radius) {
+  const layerGap = TAZER_CANNON_WAVE_RADIUS / TAZER_CANNON_WAVE_LAYERS;
+  const innerRadius = Math.max(0, radius - layerGap * 0.8);
+  wave.rings.push({ radius, life: 0.3, max: 0.3 });
+  for (let i = 0; i < TAZER_CANNON_WAVE_STRIKES; i += 1) {
+    const angle = (i / TAZER_CANNON_WAVE_STRIKES) * TAU + (wave.layerIndex || 0) * 0.27;
+    const innerX = wave.x + Math.cos(angle) * innerRadius;
+    const innerY = wave.y + Math.sin(angle) * innerRadius;
     lightning.push({
-      x1: wave.x,
-      y1: wave.y,
-      x2: wave.x + Math.cos(angle) * 230,
-      y2: wave.y + Math.sin(angle) * 230,
-      life: 0.3,
-      max: 0.3,
+      x1: innerX,
+      y1: innerY,
+      x2: wave.x + Math.cos(angle) * radius,
+      y2: wave.y + Math.sin(angle) * radius,
+      life: 0.24,
+      max: 0.24,
       color: "#fff06d",
       glowColor: "rgba(255,240,109,0.34)",
       glowFade: "rgba(255,240,109,0)",
       large: true,
-      width: 10,
-      burst: 62,
+      width: 9,
+      burst: 58,
     });
   }
   if (lightning.length > MAX_LIGHTNING) lightning.splice(0, lightning.length - MAX_LIGHTNING);
-  addSpark(wave.x, wave.y, "#fff06d", 16);
-  camera.shake = Math.max(camera.shake, 9);
+  addSpark(wave.x, wave.y, "#fff06d", 4);
 }
 
 function updateTazerCannonTraps(dt) {
@@ -2463,6 +2479,15 @@ function updateTazerCannonWaves(dt) {
     wave.life -= dt;
     const progress = clamp(wave.age / wave.max, 0, 1);
     wave.radius = TAZER_CANNON_WAVE_RADIUS * (1 - (1 - progress) * (1 - progress));
+    const layerGap = TAZER_CANNON_WAVE_RADIUS / TAZER_CANNON_WAVE_LAYERS;
+    while (wave.layerIndex < TAZER_CANNON_WAVE_LAYERS && wave.radius >= (wave.layerIndex + 1) * layerGap) {
+      emitTazerCannonWaveLayer(wave, (wave.layerIndex + 1) * layerGap);
+      wave.layerIndex += 1;
+    }
+    for (let ring = wave.rings.length - 1; ring >= 0; ring -= 1) {
+      wave.rings[ring].life -= dt;
+      if (wave.rings[ring].life <= 0) wave.rings.splice(ring, 1);
+    }
     enemies.forEach((enemy) => {
       if (enemy.team === "ally" || enemy.hp <= 0 || wave.hitIds.has(enemy.id)) return;
       const d = Math.hypot(enemy.x - wave.x, enemy.y - wave.y);
@@ -7438,6 +7463,20 @@ function drawTazerCannonWave(wave) {
   const alpha = clamp(wave.life / wave.max, 0, 1);
   const radius = wave.radius || 0;
   ctx.save();
+  (wave.rings || []).forEach((ring) => {
+    const ringAlpha = clamp(ring.life / ring.max, 0, 1) * alpha;
+    ctx.globalAlpha = ringAlpha;
+    ctx.strokeStyle = "rgba(255,240,109,0.72)";
+    ctx.lineWidth = 4 + ringAlpha * 8;
+    ctx.beginPath();
+    ctx.arc(wave.x, wave.y, ring.radius, 0, TAU);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,0.52)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(wave.x, wave.y, ring.radius + 7, 0, TAU);
+    ctx.stroke();
+  });
   ctx.globalAlpha = alpha;
   const grad = ctx.createRadialGradient(wave.x, wave.y, Math.max(1, radius - TAZER_CANNON_WAVE_WIDTH), wave.x, wave.y, radius + TAZER_CANNON_WAVE_WIDTH);
   grad.addColorStop(0, "rgba(255,240,109,0)");
