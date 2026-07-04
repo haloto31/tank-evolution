@@ -60,6 +60,11 @@ const TAZER_END_STORM_STUN = 3;
 const TAZER_MINI_COOLDOWN = 50;
 const TAZER_MINI_COUNT = 3;
 const TAZER_MINI_DAMAGE = 20;
+const TAZER_CANNON_COOLDOWN = 65;
+const TAZER_CANNON_COUNT = 6;
+const TAZER_CANNON_DURATION = 3;
+const TAZER_CANNON_DPS = 100;
+const TAZER_CANNON_RADIUS = 96;
 const TAZER_ENERGY_DRAIN = 0.34;
 const TAZER_ENERGY_REGEN = 0.26;
 const RAILGUN_DPS = 95;
@@ -152,6 +157,7 @@ const player = {
   tazerBeamCooldown: 0,
   tazerBeamActive: 0,
   tazerMiniCooldown: 0,
+  tazerCannonCooldown: 0,
   tazerEnergy: 1,
   railEnergy: 1,
   railGiantCooldown: 0,
@@ -195,6 +201,7 @@ const lightning = [];
 const nukes = [];
 const gammaStorms = [];
 const tazerEndStorms = [];
+const tazerCannonTraps = [];
 
 const multiplayer = {
   enabled: location.protocol === "http:" || location.protocol === "https:",
@@ -1174,6 +1181,7 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
     tazerBeamCooldown: 0,
     tazerBeamActive: 0,
     tazerMiniCooldown: 0,
+    tazerCannonCooldown: 0,
     tazerEnergy: 1,
     railEnergy: 1,
     railGiantCooldown: 0,
@@ -1218,6 +1226,7 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
   nukes.length = 0;
   gammaStorms.length = 0;
   tazerEndStorms.length = 0;
+  tazerCannonTraps.length = 0;
   spawnCarry = 0;
   nextEnemyId = 1;
   infantryArmySpawned = 0;
@@ -2301,6 +2310,72 @@ function tazerScreenStun() {
   camera.shake = Math.max(camera.shake, stunned > 0 ? 7 : 2);
 }
 
+function spawnTazerCannonTrap() {
+  const target = findNearestHostileToPlayer();
+  if (!target) {
+    addSpark(player.x + Math.cos(player.angle) * 42, player.y + Math.sin(player.angle) * 42, "#fff06d", 4);
+    return false;
+  }
+  tazerCannonTraps.push({
+    targetId: target.id,
+    x: target.x,
+    y: target.y,
+    life: TAZER_CANNON_DURATION,
+    max: TAZER_CANNON_DURATION,
+    visualTimer: 0,
+    spin: Math.random() * TAU,
+  });
+  target.stun = Math.max(target.stun || 0, TAZER_CANNON_DURATION);
+  target.knockVx = 0;
+  target.knockVy = 0;
+  addSpark(target.x, target.y, "#fff06d", 12);
+  camera.shake = Math.max(camera.shake, 5);
+  return true;
+}
+
+function updateTazerCannonTraps(dt) {
+  for (let i = tazerCannonTraps.length - 1; i >= 0; i -= 1) {
+    const trap = tazerCannonTraps[i];
+    trap.life -= dt;
+    const target = enemies.find((enemy) => enemy.id === trap.targetId && enemy.team !== "ally");
+    if (!target || target.hp <= 0 || trap.life <= 0) {
+      tazerCannonTraps.splice(i, 1);
+      continue;
+    }
+    trap.x = target.x;
+    trap.y = target.y;
+    trap.spin += dt * 0.9;
+    target.stun = Math.max(target.stun || 0, 0.14);
+    target.knockVx = 0;
+    target.knockVy = 0;
+    const damage = enemyIncomingDamage(target, playerDamage(TAZER_CANNON_DPS * dt, target));
+    target.hp -= damage;
+    markHit(target, damage, { x: trap.x, y: trap.y, kind: "tazerCannon", noKnockback: true });
+
+    trap.visualTimer -= dt;
+    if (trap.visualTimer <= 0) {
+      trap.visualTimer = 0.08;
+      for (let cannon = 0; cannon < TAZER_CANNON_COUNT; cannon += 1) {
+        const angle = trap.spin + (cannon / TAZER_CANNON_COUNT) * TAU;
+        const cx = target.x + Math.cos(angle) * TAZER_CANNON_RADIUS;
+        const cy = target.y + Math.sin(angle) * TAZER_CANNON_RADIUS;
+        lightning.push({
+          x1: cx,
+          y1: cy,
+          x2: target.x,
+          y2: target.y,
+          life: 0.09,
+          max: 0.09,
+          color: "#fff06d",
+          width: 3,
+        });
+      }
+      if (lightning.length > MAX_LIGHTNING) lightning.splice(0, lightning.length - MAX_LIGHTNING);
+      addSpark(target.x, target.y, "#fff06d", 2);
+    }
+  }
+}
+
 function tazerGiantBeam(dt = 1) {
   const reach = 720;
   const beamRadius = 58;
@@ -3241,6 +3316,7 @@ function firePlayer(dt, target) {
     startTazerEndStorm();
   }
   player.tazerMiniCooldown = Math.max(0, (player.tazerMiniCooldown || 0) - dt);
+  player.tazerCannonCooldown = Math.max(0, (player.tazerCannonCooldown || 0) - dt);
   player.railGiantCooldown = Math.max(0, (player.railGiantCooldown || 0) - dt);
   if (player.tankKey === "tazer" && player.tazerBeamActive > 0) {
     tazerGiantBeam(dt);
@@ -3270,6 +3346,9 @@ function firePlayer(dt, target) {
   if (player.tankKey === "tazer" && keys.has("z") && player.tazerMiniCooldown <= 0) {
     player.tazerMiniCooldown = TAZER_MINI_COOLDOWN;
     summonMiniTasers();
+  }
+  if (player.tankKey === "tazer" && keys.has("r") && player.tazerCannonCooldown <= 0 && spawnTazerCannonTrap()) {
+    player.tazerCannonCooldown = TAZER_CANNON_COOLDOWN;
   }
   if (player.tankKey === "dragonTamer" && keys.has("e") && player.dragonCooldown <= 0) {
     player.dragonCooldown = DRAGON_HORDE_COOLDOWN;
@@ -5760,6 +5839,7 @@ function updateParticles(dt) {
     }
     if (storm.strikesLeft <= 0) tazerEndStorms.splice(i, 1);
   }
+  updateTazerCannonTraps(dt);
   if (flames.length > MAX_FLAMES) flames.splice(0, flames.length - MAX_FLAMES);
   for (let i = flames.length - 1; i >= 0; i -= 1) {
     flames[i].life -= dt;
@@ -5821,6 +5901,9 @@ function draw() {
   });
   nukes.forEach((nuke) => {
     if (onScreen(nuke, (nuke.radius || 220) + 120)) drawNuke(nuke);
+  });
+  tazerCannonTraps.forEach((trap) => {
+    if (onScreen(trap, TAZER_CANNON_RADIUS + 160)) drawTazerCannonTrap(trap);
   });
   lightning.forEach(drawLightning);
   enemies.forEach((enemy) => {
@@ -7172,6 +7255,49 @@ function drawSpark(s) {
   ctx.globalAlpha = 1;
 }
 
+function drawTazerCannonTrap(trap) {
+  const target = enemies.find((enemy) => enemy.id === trap.targetId) || trap;
+  const pct = clamp(trap.life / trap.max, 0, 1);
+  const pulse = 1 + Math.sin(performance.now() * 0.012) * 0.08;
+  ctx.save();
+  ctx.globalAlpha = 0.22 + pct * 0.28;
+  ctx.strokeStyle = "#fff06d";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(target.x, target.y, TAZER_CANNON_RADIUS * pulse, 0, TAU);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  for (let i = 0; i < TAZER_CANNON_COUNT; i += 1) {
+    const angle = trap.spin + (i / TAZER_CANNON_COUNT) * TAU;
+    const cx = target.x + Math.cos(angle) * TAZER_CANNON_RADIUS;
+    const cy = target.y + Math.sin(angle) * TAZER_CANNON_RADIUS;
+    const aim = angleTo({ x: cx, y: cy }, target);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(aim);
+    ctx.fillStyle = "rgba(255,240,109,0.25)";
+    ctx.beginPath();
+    ctx.arc(0, 0, 18, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = "#172132";
+    ctx.strokeStyle = "#fff06d";
+    ctx.lineWidth = 2;
+    roundRect(-13, -9, 26, 18, 5);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#fff06d";
+    roundRect(7, -4, 21, 8, 4);
+    ctx.fill();
+    ctx.fillStyle = "#eaffff";
+    ctx.beginPath();
+    ctx.arc(-4, 0, 4, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 function onScreen(entity, pad = 140) {
   pad = Number.isFinite(pad) ? pad : 140;
   const halfW = canvas.width / (2 * camera.scale) + pad;
@@ -7184,7 +7310,7 @@ function drawHud() {
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "rgba(11,15,12,0.72)";
-  const panelHeight = player.tankKey === "railgun" ? 196 : player.tankKey === "dragonTamer" ? 226 : player.tankKey === "tazer" ? 256 : player.tankKey === "gamma" ? 166 : 136;
+  const panelHeight = player.tankKey === "railgun" ? 196 : player.tankKey === "dragonTamer" ? 226 : player.tankKey === "tazer" ? 286 : player.tankKey === "gamma" ? 166 : 136;
   roundRect(pad, pad, 360 * camera.scale, panelHeight * camera.scale, 8 * camera.scale);
   ctx.fill();
   ctx.fillStyle = "#f5f4eb";
@@ -7257,7 +7383,16 @@ function drawHud() {
       "#d7fbff",
       `Z mini tasers ${Math.ceil(player.tazerMiniCooldown || 0)}s`
     );
-    infoY = 232;
+    bar(
+      pad + 16 * camera.scale,
+      pad + 228 * camera.scale,
+      310 * camera.scale,
+      12 * camera.scale,
+      1 - (player.tazerCannonCooldown || 0) / TAZER_CANNON_COOLDOWN,
+      "#fff06d",
+      `R cannon cage ${Math.ceil(player.tazerCannonCooldown || 0)}s`
+    );
+    infoY = 262;
   } else if (player.tankKey === "dragonTamer") {
     bar(
       pad + 16 * camera.scale,
