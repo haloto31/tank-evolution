@@ -1223,6 +1223,14 @@ function requestedWaveSkip() {
   return wave;
 }
 
+function hasPasswordAccess() {
+  return (waveSkipPassword?.value.trim() || "") === WAVE_SKIP_PASSWORD;
+}
+
+function starterNeedsPassword(tank) {
+  return tank.key === "tazer" || tank.key === "dragonTamer" || tank.key === "startUltra" || tank.variant === "defaultUltra";
+}
+
 function applyWaveSkip(wave) {
   if (wave <= 1) return;
   player.level = wave;
@@ -1232,7 +1240,10 @@ function applyWaveSkip(wave) {
     player.maxHp = Math.max(1, Math.round(scaledTankMaxHp(wave) * (player.perks.maxHpMult || 1) * (player.maxHpPenaltyMult || 1)));
     player.hp = player.maxHp;
   }
-  player.tankStage = Math.min(MAX_EVOLUTION_STAGE, Math.max(player.tankStage || 1, wave));
+  if (!player.lockedTank && upgradePools[player.tankKey]) {
+    pendingUpgradeTokens = Math.max(pendingUpgradeTokens, Math.max(0, wave - 1));
+    upgradeChoices = [];
+  }
 }
 
 function resetGame(tankKey = "default", mode = selectedGameMode) {
@@ -1466,14 +1477,21 @@ function setMouseFromEvent(event) {
 
 function chooseTankCard(tank) {
   const button = document.createElement("button");
-  button.className = "tank-card";
+  const locked = starterNeedsPassword(tank);
+  button.className = `tank-card${locked ? " password-locked" : ""}`;
   button.innerHTML = `
     ${starterPortrait(tank)}
     <h3>${tank.name}</h3>
     <p>${tank.description}</p>
-    <div class="stats">${tank.stats.map((stat) => `<span class="stat">${stat}</span>`).join("")}</div>
+    <div class="stats">${tank.stats.map((stat) => `<span class="stat">${stat}</span>`).join("")}${locked ? `<span class="stat password-stat">Password</span>` : ""}</div>
   `;
-  button.addEventListener("click", () => resetGame(tank.key, selectedGameMode));
+  button.addEventListener("click", () => {
+    if (starterNeedsPassword(tank) && !hasPasswordAccess()) {
+      if (waveSkipStatus) waveSkipStatus.textContent = "Password needed for Tazer, Dragon Tamer, and Ultra.";
+      return;
+    }
+    resetGame(tank.key, selectedGameMode);
+  });
   return button;
 }
 

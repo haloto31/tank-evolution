@@ -338,6 +338,11 @@ h2 {
   transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
 }
 
+.tank-card.password-locked {
+  border-color: rgba(242, 202, 82, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(242, 202, 82, 0.08);
+}
+
 .tank-card:focus-visible,
 .upgrade-card:focus-visible,
 button:focus-visible {
@@ -378,6 +383,11 @@ button:focus-visible {
   font-size: 0.78rem;
   font-weight: 800;
   padding: 6px 9px;
+}
+
+.password-stat {
+  border-color: rgba(242, 202, 82, 0.55);
+  color: var(--accent);
 }
 
 .hint {
