@@ -117,6 +117,7 @@ const BOSS_LEVEL_INTERVAL = 10;
 const LEVEL_TEN_BOSS_HP_MULTIPLIER = 100;
 const LEVEL_TEN_BOSS_DAMAGE_MULTIPLIER = 50;
 const FINAL_BOSS_LEVEL = 20;
+const VICTORY_BOSS_LEVEL = 21;
 const FINAL_BOSS_DAMAGE_MULTIPLIER = 1 / 3;
 const FINAL_BOSS_RELOAD = 5;
 const WAVE_SKIP_PASSWORD = "01028224915";
@@ -1194,6 +1195,10 @@ function tankHpMultiplier(tankKey) {
   return tankKey === "railgun" ? 0.6 : 1;
 }
 
+function isBossLevel(level) {
+  return level % BOSS_LEVEL_INTERVAL === 0 || level === VICTORY_BOSS_LEVEL;
+}
+
 function xpNextForLevel(level) {
   let xpNext = 100;
   for (let current = 1; current < level; current += 1) {
@@ -1331,7 +1336,7 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
   if (activeGameMode === "infantryArmy") {
     spawnInfantryArmyArrow();
   }
-  if (activeGameMode !== "infantryArmy" && (player.lockedTank || player.level % BOSS_LEVEL_INTERVAL === 0)) {
+  if (activeGameMode !== "infantryArmy" && (player.lockedTank || isBossLevel(player.level))) {
     bossSpawnedLevels.add(player.level);
     spawnBoss(player.level);
   }
@@ -3296,10 +3301,12 @@ function spawnInfantryArmySoldier(options = {}) {
 
 function spawnBoss(level) {
   const isFinalBoss = level === FINAL_BOSS_LEVEL;
-  const loadout = isFinalBoss
+  const isVictoryBoss = level === VICTORY_BOSS_LEVEL;
+  const isUltraBoss = isFinalBoss || isVictoryBoss;
+  const loadout = isUltraBoss
     ? {
         tankKey: "default",
-        buildName: "Final Ultra Tank",
+        buildName: isVictoryBoss ? "Victory Ultra Tank" : "Final Ultra Tank",
         color: "#5b2d2d",
         accent: "#ffef88",
         ...createVariantLoadout("defaultUltra", level),
@@ -3318,13 +3325,14 @@ function spawnBoss(level) {
     team: "enemy",
     boss: true,
     finalBoss: isFinalBoss,
+    victoryBoss: isVictoryBoss,
     tankKey: loadout.tankKey,
-    buildName: isFinalBoss ? "Wave 20 Final Boss Ultra Tank" : isLevelTenBoss ? `Level 10 Boss ${loadout.buildName}` : `Boss ${loadout.buildName}`,
+    buildName: isVictoryBoss ? "Wave 21 Victory Boss Ultra Tank" : isFinalBoss ? "Wave 20 Final Boss Ultra Tank" : isLevelTenBoss ? `Level 10 Boss ${loadout.buildName}` : `Boss ${loadout.buildName}`,
     color: "#5b2d2d",
     accent: loadout.accent,
     mods: bossMods,
     level,
-    damageMult: isFinalBoss ? FINAL_BOSS_DAMAGE_MULTIPLIER : isLevelTenBoss ? LEVEL_TEN_BOSS_DAMAGE_MULTIPLIER : 1,
+    damageMult: isUltraBoss ? FINAL_BOSS_DAMAGE_MULTIPLIER : isLevelTenBoss ? LEVEL_TEN_BOSS_DAMAGE_MULTIPLIER : 1,
     x,
     y,
     r: 38,
@@ -3335,7 +3343,7 @@ function spawnBoss(level) {
     strategy: enemyStrategyFor(loadout, true),
     orbitSide: Math.random() < 0.5 ? -1 : 1,
     surroundAngle: nextEnemyId * 2.399963229728653 + Math.random() * 0.3,
-    fixedReload: isFinalBoss ? FINAL_BOSS_RELOAD : null,
+    fixedReload: isUltraBoss ? FINAL_BOSS_RELOAD : null,
     cooldown: 0.45,
     burn: 0,
     burnDps: 0,
@@ -4747,7 +4755,7 @@ function gainXp(amount) {
     player.tazerGuardHpBonus = guardActive ? Math.max(0, Math.round(newBaseMaxHp * (TAZER_GUARD_TEMP_HP_MULTIPLIER - 1))) : 0;
     player.maxHp = newBaseMaxHp + player.tazerGuardHpBonus;
     player.hp = Math.min(player.maxHp, player.hp + 20 + Math.max(0, player.maxHp - oldMaxHp));
-    if (activeGameMode !== "infantryArmy" && (player.lockedTank || player.level % BOSS_LEVEL_INTERVAL === 0) && !bossSpawnedLevels.has(player.level)) {
+    if (activeGameMode !== "infantryArmy" && (player.lockedTank || isBossLevel(player.level)) && !bossSpawnedLevels.has(player.level)) {
       bossSpawnedLevels.add(player.level);
       spawnBoss(player.level);
     }
@@ -5677,7 +5685,7 @@ function update(dt) {
   updateEnemies(dt);
   refreshEntityCounts();
   if (activeGameMode === "infantryArmy" && infantryArmySpawned >= INFANTRY_ARMY_CAP && hostileArmyThreatCount() === 0) {
-    winGame();
+    winGame("army");
     return;
   }
   resolveBodyCollisions();
@@ -6117,12 +6125,17 @@ function updateEnemies(dt) {
       if (player.hp <= 0) endGame();
     }
     if (enemy.hp <= 0) {
+      const defeatedVictoryBoss = enemy.victoryBoss && enemy.team !== "ally";
       addSpark(enemy.x, enemy.y, "#f2ca52", 16);
-      if (enemy.team !== "ally" && !enemy.infantry && enemy.tankKey !== "dragon") spawnInfantryPack(enemy);
+      if (enemy.team !== "ally" && !enemy.infantry && enemy.tankKey !== "dragon" && !defeatedVictoryBoss) spawnInfantryPack(enemy);
       enemies.splice(i, 1);
       if (enemy.team !== "ally") {
         player.kills += enemy.boss ? 10 : 1;
         if (player.perks.killHeal) player.hp = Math.min(player.maxHp, player.hp + player.perks.killHeal);
+        if (defeatedVictoryBoss) {
+          winGame("level21Boss");
+          continue;
+        }
         gainXp(xpRewardForEnemy(enemy));
       }
     }
@@ -6264,9 +6277,12 @@ function endGame() {
   showOnly("gameOver");
 }
 
-function winGame() {
+function winGame(reason = "level21Boss") {
   gameState = "gameOver";
-  finalStats.textContent = `Victory - Level ${player.level} - ${player.kills} enemies destroyed - only shielders remain`;
+  finalStats.textContent =
+    reason === "army"
+      ? `Victory - Level ${player.level} - ${player.kills} enemies destroyed - only shielders remain`
+      : `Victory - Level ${player.level} boss defeated - ${player.kills} enemies destroyed - ${player.buildName}`;
   showOnly("gameOver");
 }
 
