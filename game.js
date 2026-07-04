@@ -108,11 +108,11 @@ const BOSS_LEVEL_INTERVAL = 10;
 const LEVEL_TEN_BOSS_HP_MULTIPLIER = 100;
 const LEVEL_TEN_BOSS_DAMAGE_MULTIPLIER = 50;
 const MAX_EVOLUTION_STAGE = 30;
-const MAX_SPARKS = 35;
-const MAX_LIGHTNING = 36;
-const MAX_PLAYER_BULLETS = 120;
-const MAX_ENEMY_BULLETS = 145;
-const MAX_FLAMES = 22;
+const MAX_SPARKS = 24;
+const MAX_LIGHTNING = 24;
+const MAX_PLAYER_BULLETS = 90;
+const MAX_ENEMY_BULLETS = 95;
+const MAX_FLAMES = 14;
 const MAX_BABY_DRAGONS = 5;
 const MAX_ADULT_DRAGONS = 1;
 const keys = new Set();
@@ -129,6 +129,12 @@ let selectedGameMode = "evolution";
 let activeGameMode = "evolution";
 let infantryArmySpawned = 0;
 let hudHidden = false;
+const entityCounts = {
+  hostiles: 0,
+  infantry: 0,
+  armyThreats: 0,
+  allies: 0,
+};
 
 const world = {
   w: 2600,
@@ -166,6 +172,7 @@ const player = {
   tankStage: 1,
   lockedTank: false,
   perks: {},
+  maxHpPenaltyMult: 1,
   buildName: "Default Tank",
   cooldown: 0,
   trooperHeliCooldown: 0,
@@ -1194,6 +1201,7 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
     tankStage: starter.variant === "defaultUltra" ? 6 : 1,
     lockedTank: starter.variant === "defaultUltra" || starter.key === "trooper" || starter.key === "dragonTamer",
     perks: { ...starterPerks },
+    maxHpPenaltyMult: 1,
     buildName: starter.name,
     cooldown: 0,
     trooperHeliCooldown: 0,
@@ -1268,6 +1276,7 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
     bossSpawnedLevels.add(player.level);
     spawnBoss(player.level);
   }
+  refreshEntityCounts();
 }
 
 function spawnInfantryArmyArrow() {
@@ -1558,36 +1567,36 @@ function distanceSq(a, b) {
   return dx * dx + dy * dy;
 }
 
-function hostileCount() {
-  let count = 0;
+function refreshEntityCounts() {
+  entityCounts.hostiles = 0;
+  entityCounts.infantry = 0;
+  entityCounts.armyThreats = 0;
+  entityCounts.allies = 0;
   enemies.forEach((tank) => {
-    if (tank.team !== "ally" && !tank.infantry) count += 1;
+    if (tank.team === "ally") {
+      entityCounts.allies += 1;
+      return;
+    }
+    if (tank.infantry) entityCounts.infantry += 1;
+    else entityCounts.hostiles += 1;
+    if (!tank.shielderTrooper) entityCounts.armyThreats += 1;
   });
-  return count;
+}
+
+function hostileCount() {
+  return entityCounts.hostiles;
 }
 
 function hostileInfantryCount() {
-  let count = 0;
-  enemies.forEach((tank) => {
-    if (tank.team !== "ally" && tank.infantry) count += 1;
-  });
-  return count;
+  return entityCounts.infantry;
 }
 
 function hostileArmyThreatCount() {
-  let count = 0;
-  enemies.forEach((tank) => {
-    if (tank.team !== "ally" && !tank.shielderTrooper) count += 1;
-  });
-  return count;
+  return entityCounts.armyThreats;
 }
 
 function allyCount() {
-  let count = 0;
-  enemies.forEach((tank) => {
-    if (tank.team === "ally") count += 1;
-  });
-  return count;
+  return entityCounts.allies;
 }
 
 function allyMaxHp() {
@@ -2446,6 +2455,7 @@ function startTazerFocusStorm() {
     addSpark(player.x + Math.cos(player.angle) * 42, player.y + Math.sin(player.angle) * 42, "#fff06d", 5);
     return false;
   }
+  player.maxHpPenaltyMult = (player.maxHpPenaltyMult || 1) * TAZER_FOCUS_MAX_HP_MULTIPLIER;
   player.maxHp = Math.max(1, Math.round(player.maxHp * TAZER_FOCUS_MAX_HP_MULTIPLIER));
   player.hp = Math.min(player.hp, player.maxHp);
   tazerFocusStorms.push({
@@ -2466,23 +2476,26 @@ function strikeTazerFocusStorm(storm) {
   if (!target || target.hp <= 0) return false;
   storm.x = target.x;
   storm.y = target.y;
-  const spread = 120 + Math.random() * 90;
-  lightning.push({
-    x1: target.x + (Math.random() - 0.5) * spread,
-    y1: Math.max(0, target.y - 560 - Math.random() * 180),
-    x2: target.x + (Math.random() - 0.5) * 18,
-    y2: target.y + (Math.random() - 0.5) * 18,
-    life: 0.18,
-    max: 0.18,
-    color: "#fff06d",
-    glowColor: "rgba(255,240,109,0.38)",
-    glowFade: "rgba(255,240,109,0)",
-    large: true,
-    skyStrike: true,
-    width: 10,
-    burst: 62,
-  });
-  if (lightning.length > MAX_LIGHTNING) lightning.splice(0, lightning.length - MAX_LIGHTNING);
+  const showBolt = storm.strikesLeft % 4 === 0 || storm.strikesLeft <= 8;
+  if (showBolt) {
+    const spread = 120 + Math.random() * 90;
+    lightning.push({
+      x1: target.x + (Math.random() - 0.5) * spread,
+      y1: Math.max(0, target.y - 560 - Math.random() * 180),
+      x2: target.x + (Math.random() - 0.5) * 18,
+      y2: target.y + (Math.random() - 0.5) * 18,
+      life: 0.18,
+      max: 0.18,
+      color: "#fff06d",
+      glowColor: "rgba(255,240,109,0.38)",
+      glowFade: "rgba(255,240,109,0)",
+      large: true,
+      skyStrike: true,
+      width: 10,
+      burst: 62,
+    });
+    if (lightning.length > MAX_LIGHTNING) lightning.splice(0, lightning.length - MAX_LIGHTNING);
+  }
   const damage = enemyIncomingDamage(target, playerDamage(TAZER_FOCUS_DAMAGE, target));
   target.hp -= damage;
   target.stun = Math.max(target.stun || 0, 0.2);
@@ -2608,6 +2621,7 @@ function updateTazerGuard(dt) {
   const wasActive = (player.tazerGuardActive || 0) > 0;
   player.tazerGuardActive = Math.max(0, (player.tazerGuardActive || 0) - dt);
   if (player.tankKey !== "tazer" || !wasActive || player.tazerGuardActive > 0) return;
+  player.maxHpPenaltyMult = (player.maxHpPenaltyMult || 1) * TAZER_GUARD_MAX_HP_MULTIPLIER;
   player.maxHp = Math.max(1, Math.round(player.maxHp * TAZER_GUARD_MAX_HP_MULTIPLIER));
   player.hp = Math.min(player.hp, player.maxHp);
   addSpark(player.x, player.y, "#ff7665", 16);
@@ -4640,7 +4654,8 @@ function gainXp(amount) {
     player.level += 1;
     player.xpNext = Math.ceil(player.xpNext * 1.5);
     const oldMaxHp = player.maxHp;
-    player.maxHp = player.lockedTank ? player.maxHp : Math.max(1, Math.round(scaledTankMaxHp(player.level) * (player.perks.maxHpMult || 1)));
+    const penaltyMult = player.maxHpPenaltyMult || 1;
+    player.maxHp = player.lockedTank ? player.maxHp : Math.max(1, Math.round(scaledTankMaxHp(player.level) * (player.perks.maxHpMult || 1) * penaltyMult));
     player.hp = Math.min(player.maxHp, player.hp + 20 + Math.max(0, player.maxHp - oldMaxHp));
     if (activeGameMode !== "infantryArmy" && (player.lockedTank || player.level % BOSS_LEVEL_INTERVAL === 0) && !bossSpawnedLevels.has(player.level)) {
       bossSpawnedLevels.add(player.level);
@@ -5515,6 +5530,7 @@ function update(dt) {
   player.invuln = Math.max(0, player.invuln - dt);
   updateTazerGuard(dt);
   player.hp = Math.min(player.maxHp, player.hp + regenAmount(player, dt));
+  refreshEntityCounts();
 
   let dx = 0;
   let dy = 0;
@@ -5537,6 +5553,7 @@ function update(dt) {
     if (hostileCount() < ENEMY_CAP) spawnCarry += player.level * dt;
     while (spawnCarry >= 1 && hostileCount() < ENEMY_CAP) {
       spawnEnemy();
+      refreshEntityCounts();
       spawnCarry -= 1;
     }
     if (hostileCount() >= ENEMY_CAP) spawnCarry = Math.min(spawnCarry, 1);
@@ -5546,6 +5563,7 @@ function update(dt) {
   applyRemotePlayers(dt);
   updateBullets(dt);
   updateEnemies(dt);
+  refreshEntityCounts();
   if (activeGameMode === "infantryArmy" && infantryArmySpawned >= INFANTRY_ARMY_CAP && hostileArmyThreatCount() === 0) {
     winGame();
     return;
@@ -6170,7 +6188,9 @@ function draw() {
   tazerCannonWaves.forEach((wave) => {
     if (onScreen(wave, TAZER_CANNON_WAVE_RADIUS + 120)) drawTazerCannonWave(wave);
   });
-  lightning.forEach(drawLightning);
+  lightning.forEach((bolt) => {
+    if (lightningOnScreen(bolt)) drawLightning(bolt);
+  });
   enemies.forEach((enemy) => {
     if (onScreen(enemy, 170)) drawEnemy(enemy);
   });
@@ -7423,6 +7443,11 @@ function drawLightning(bolt) {
   ctx.lineWidth = large ? 3 : 1;
   ctx.stroke();
   ctx.restore();
+}
+
+function lightningOnScreen(bolt) {
+  const pad = (bolt.burst || 40) + (bolt.width || 8) + 90;
+  return onScreen({ x: bolt.x1, y: bolt.y1 }, pad) || onScreen({ x: bolt.x2, y: bolt.y2 }, pad);
 }
 
 function drawNuke(nuke) {
