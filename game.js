@@ -97,6 +97,7 @@ const FLAME_BULLET_BURN_SECONDS = 3;
 const RAILGUN_BULLET_BURN_SECONDS = 1;
 const REGEN_PERCENT_PER_SECOND = 0.05;
 const LOW_REGEN_PERCENT_PER_SECOND = 0.02;
+const TAZER_REGEN_PERCENT_PER_SECOND = 0.005;
 const HIT_KNOCKBACK_SPEED = 135;
 const DEFAULT_BULLET_DAMAGE = 7.5;
 const BOSS_LEVEL_INTERVAL = 10;
@@ -1586,14 +1587,14 @@ function allyMaxHp() {
 }
 
 function lowRegenTank(tank) {
-  return tank.tankKey === "tazer" || tank.tankKey === "railgun" || tank.tankKey === "juggernaut" || tank.tankKey === "gamma";
+  return tank.tankKey === "railgun" || tank.tankKey === "juggernaut" || tank.tankKey === "gamma";
 }
 
 function regenAmount(tank, dt) {
   if (tank.tankKey === "trooper") return 0;
   if (tank.miniTazer) return 0;
   if (tank.tankKey === "infantry") return tank.maxHp * 0.01 * dt;
-  const baseRegen = lowRegenTank(tank) ? LOW_REGEN_PERCENT_PER_SECOND : REGEN_PERCENT_PER_SECOND;
+  const baseRegen = tank.tankKey === "tazer" ? TAZER_REGEN_PERCENT_PER_SECOND : lowRegenTank(tank) ? LOW_REGEN_PERCENT_PER_SECOND : REGEN_PERCENT_PER_SECOND;
   if (tank.mods?.nukeExplosion && tank.tankKey !== "airstrike" && !lowRegenTank(tank)) return 0;
   const airstrikeRegen = tank.tankKey === "airstrike" ? 1.25 : 1;
   const mult = (tank === player ? player.perks.regenMult || 1 : 1) * airstrikeRegen;
