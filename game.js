@@ -20,7 +20,8 @@ const fireTouch = document.getElementById("fire-touch");
 
 const TAU = Math.PI * 2;
 const ENEMY_CAP = 10;
-const ENEMY_HP_MULTIPLIER = 3;
+const ENEMY_HP_MULTIPLIER = 1.5;
+const SPECIAL_ENEMY_HP_SCALE = 0.5;
 const INFANTRY_ARMY_CAP = 95;
 const ALLY_SPAWN_CHANCE = 0.01;
 const ALLY_POWER_MULTIPLIER = 0.1;
@@ -1684,6 +1685,7 @@ function applyRemotePlayers(dt) {
   multiplayer.remoteInputs.forEach((input, id) => {
     let remote = enemies.find((enemy) => enemy.remoteId === id);
     if (!remote) {
+      const remoteMaxHp = Math.max(1, Math.round(scaledTankMaxHp(Math.max(1, player.level - 1)) * SPECIAL_ENEMY_HP_SCALE));
       remote = {
         id: nextEnemyId,
         remoteId: id,
@@ -1698,8 +1700,8 @@ function applyRemotePlayers(dt) {
         x: clamp(player.x + 520 * (Math.random() - 0.5), 60, world.w - 60),
         y: clamp(player.y + 520 * (Math.random() - 0.5), 60, world.h - 60),
         r: 23,
-        hp: scaledTankMaxHp(Math.max(1, player.level - 1)),
-        maxHp: scaledTankMaxHp(Math.max(1, player.level - 1)),
+        hp: remoteMaxHp,
+        maxHp: remoteMaxHp,
         speed: 205,
         angle: 0,
         cooldown: 0,
@@ -2907,7 +2909,8 @@ function spawnInfantryArmySoldier(options = {}) {
   const margin = 90;
   const x = options.x ?? (side === 1 ? world.w + margin : side === 3 ? -margin : Math.random() * world.w);
   const y = options.y ?? (side === 0 ? -margin : side === 2 ? world.h + margin : Math.random() * world.h);
-  const maxHp = (soldierType === "medic" ? 34 : soldierType === "bomber" ? 30 : soldierType === "shielder" ? 42 : 24) + Math.max(0, level - 1) * 20;
+  const baseMaxHp = (soldierType === "medic" ? 34 : soldierType === "bomber" ? 30 : soldierType === "shielder" ? 42 : 24) + Math.max(0, level - 1) * 20;
+  const maxHp = Math.max(1, Math.round(baseMaxHp * SPECIAL_ENEMY_HP_SCALE));
   enemies.push({
     id: nextEnemyId,
     team: "enemy",
@@ -2970,7 +2973,7 @@ function spawnInfantryArmySoldier(options = {}) {
 
 function spawnBoss(level) {
   const loadout = chooseSpawnLoadout(level);
-  const bossHp = Math.round(100 * (4 + level * 0.28));
+  const bossHp = Math.max(1, Math.round(100 * (4 + level * 0.28) * SPECIAL_ENEMY_HP_SCALE));
   const side = Math.floor(Math.random() * 4);
   const x = side === 1 ? world.w - 120 : side === 3 ? 120 : Math.random() * world.w;
   const y = side === 0 ? 120 : side === 2 ? world.h - 120 : Math.random() * world.h;
@@ -3008,6 +3011,7 @@ function spawnInfantryPack(source) {
     const a = (i / 5) * TAU + Math.random() * 0.4;
     const spread = 24 + Math.random() * 20;
     const isPuncher = Math.random() < 0.1;
+    const maxHp = Math.max(1, Math.round(((isPuncher ? 28 : 18) + source.level * 2) * SPECIAL_ENEMY_HP_SCALE));
     enemies.push({
       id: nextEnemyId,
       team: "enemy",
@@ -3045,8 +3049,8 @@ function spawnInfantryPack(source) {
       x: clamp(source.x + Math.cos(a) * spread, 32, world.w - 32),
       y: clamp(source.y + Math.sin(a) * spread, 32, world.h - 32),
       r: isPuncher ? 13 : 11,
-      hp: (isPuncher ? 28 : 18) + source.level * 2,
-      maxHp: (isPuncher ? 28 : 18) + source.level * 2,
+      hp: maxHp,
+      maxHp,
       speed: (isPuncher ? 142 : 118) + source.level * 2,
       angle: 0,
       strategy: isPuncher ? "rush" : "kite",
@@ -3874,6 +3878,7 @@ function summonEnemyAdultDragon(tamer) {
   const angle = angleTo(tamer, player);
   const x = clamp(tamer.x + Math.cos(angle) * 58, 34, world.w - 34);
   const y = clamp(tamer.y + Math.sin(angle) * 58, 34, world.h - 34);
+  const maxHp = Math.max(1, Math.round((70 + tamer.level * 8) * SPECIAL_ENEMY_HP_SCALE));
   enemies.push({
     id: nextEnemyId,
     team: "enemy",
@@ -3889,8 +3894,8 @@ function summonEnemyAdultDragon(tamer) {
     x,
     y,
     r: 22,
-    hp: 70 + tamer.level * 8,
-    maxHp: 70 + tamer.level * 8,
+    hp: maxHp,
+    maxHp,
     speed: 185,
     angle,
     strategy: "dragon",
