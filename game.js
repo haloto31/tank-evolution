@@ -72,6 +72,10 @@ const TAZER_CANNON_WAVE_WIDTH = 56;
 const TAZER_CANNON_WAVE_DAMAGE = 100;
 const TAZER_CANNON_WAVE_LAYERS = 7;
 const TAZER_CANNON_WAVE_STRIKES = 8;
+const TAZER_FOCUS_STRIKES = 200;
+const TAZER_FOCUS_DAMAGE = 400;
+const TAZER_FOCUS_INTERVAL = 0.012;
+const TAZER_FOCUS_MAX_HP_MULTIPLIER = 0.05;
 const TAZER_GUARD_COOLDOWN = 45;
 const TAZER_GUARD_DURATION = 10;
 const TAZER_GUARD_DAMAGE_MULTIPLIER = 0.4;
@@ -101,6 +105,8 @@ const TAZER_REGEN_PERCENT_PER_SECOND = 0.005;
 const HIT_KNOCKBACK_SPEED = 135;
 const DEFAULT_BULLET_DAMAGE = 7.5;
 const BOSS_LEVEL_INTERVAL = 10;
+const LEVEL_TEN_BOSS_HP_MULTIPLIER = 100;
+const LEVEL_TEN_BOSS_DAMAGE_MULTIPLIER = 50;
 const MAX_EVOLUTION_STAGE = 30;
 const MAX_SPARKS = 35;
 const MAX_LIGHTNING = 36;
@@ -219,6 +225,7 @@ const gammaStorms = [];
 const tazerEndStorms = [];
 const tazerCannonTraps = [];
 const tazerCannonWaves = [];
+const tazerFocusStorms = [];
 
 const multiplayer = {
   enabled: location.protocol === "http:" || location.protocol === "https:",
@@ -1247,6 +1254,7 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
   tazerEndStorms.length = 0;
   tazerCannonTraps.length = 0;
   tazerCannonWaves.length = 0;
+  tazerFocusStorms.length = 0;
   spawnCarry = 0;
   nextEnemyId = 1;
   infantryArmySpawned = 0;
@@ -1604,6 +1612,10 @@ function regenAmount(tank, dt) {
 function playerDamage(amount, target = null) {
   const bossMult = target?.boss ? player.perks.bossDamageMult || 1 : 1;
   return amount * (player.perks.damageMult || 1) * bossMult;
+}
+
+function enemyAttackDamage(enemy, amount) {
+  return amount * (enemy?.damageMult || 1);
 }
 
 function tazerStormPenaltyActive() {
@@ -2427,6 +2439,65 @@ function emitTazerCannonWaveLayer(wave, radius) {
   addSpark(wave.x, wave.y, "#fff06d", 4);
 }
 
+function startTazerFocusStorm() {
+  if (tazerFocusStorms.length > 0) return false;
+  const target = findNearestHostileToPlayer();
+  if (!target) {
+    addSpark(player.x + Math.cos(player.angle) * 42, player.y + Math.sin(player.angle) * 42, "#fff06d", 5);
+    return false;
+  }
+  player.maxHp = Math.max(1, Math.round(player.maxHp * TAZER_FOCUS_MAX_HP_MULTIPLIER));
+  player.hp = Math.min(player.hp, player.maxHp);
+  tazerFocusStorms.push({
+    targetId: target.id,
+    x: target.x,
+    y: target.y,
+    timer: 0,
+    strikesLeft: TAZER_FOCUS_STRIKES,
+    released: false,
+  });
+  addSpark(target.x, target.y, "#fff06d", 18);
+  camera.shake = Math.max(camera.shake, 12);
+  return true;
+}
+
+function strikeTazerFocusStorm(storm) {
+  const target = enemies.find((enemy) => enemy.id === storm.targetId && enemy.team !== "ally");
+  if (!target || target.hp <= 0) return false;
+  storm.x = target.x;
+  storm.y = target.y;
+  const spread = 120 + Math.random() * 90;
+  lightning.push({
+    x1: target.x + (Math.random() - 0.5) * spread,
+    y1: Math.max(0, target.y - 560 - Math.random() * 180),
+    x2: target.x + (Math.random() - 0.5) * 18,
+    y2: target.y + (Math.random() - 0.5) * 18,
+    life: 0.18,
+    max: 0.18,
+    color: "#fff06d",
+    glowColor: "rgba(255,240,109,0.38)",
+    glowFade: "rgba(255,240,109,0)",
+    large: true,
+    skyStrike: true,
+    width: 10,
+    burst: 62,
+  });
+  if (lightning.length > MAX_LIGHTNING) lightning.splice(0, lightning.length - MAX_LIGHTNING);
+  const damage = enemyIncomingDamage(target, playerDamage(TAZER_FOCUS_DAMAGE, target));
+  target.hp -= damage;
+  target.stun = Math.max(target.stun || 0, 0.2);
+  markHit(target, damage, { x: target.x, y: target.y - 560, kind: "tazerFocus", noKnockback: true });
+  if (storm.strikesLeft % 12 === 0) addSpark(target.x, target.y, "#fff06d", 4);
+  storm.strikesLeft -= 1;
+  return true;
+}
+
+function releaseTazerFocusWave(storm) {
+  if (storm.released) return;
+  storm.released = true;
+  triggerTazerCannonWave({ x: storm.x, y: storm.y });
+}
+
 function updateTazerCannonTraps(dt) {
   for (let i = tazerCannonTraps.length - 1; i >= 0; i -= 1) {
     const trap = tazerCannonTraps[i];
@@ -2503,6 +2574,25 @@ function updateTazerCannonWaves(dt) {
       addSpark(enemy.x, enemy.y, "#fff06d", 3);
     });
     if (wave.life <= 0) tazerCannonWaves.splice(i, 1);
+  }
+}
+
+function updateTazerFocusStorms(dt) {
+  for (let i = tazerFocusStorms.length - 1; i >= 0; i -= 1) {
+    const storm = tazerFocusStorms[i];
+    storm.timer -= dt;
+    while (storm.timer <= 0 && storm.strikesLeft > 0) {
+      if (!strikeTazerFocusStorm(storm)) {
+        releaseTazerFocusWave(storm);
+        tazerFocusStorms.splice(i, 1);
+        break;
+      }
+      storm.timer += TAZER_FOCUS_INTERVAL;
+    }
+    if (storm.strikesLeft <= 0) {
+      releaseTazerFocusWave(storm);
+      tazerFocusStorms.splice(i, 1);
+    }
   }
 }
 
@@ -2735,7 +2825,7 @@ function enemyTazerChainAttack(enemy, target) {
   });
 
   let previous = zap;
-  let damage = Math.max(2, TAZER_CHAIN_DAMAGE * 0.34 * enemy.mods.shellDamage);
+  let damage = enemyAttackDamage(enemy, Math.max(2, TAZER_CHAIN_DAMAGE * 0.34 * enemy.mods.shellDamage));
   const hit = new Set();
   for (let jump = 0; current && jump < TAZER_CHAIN_JUMPS; jump += 1) {
     const hitKey = current === player ? "player" : current.id;
@@ -3119,20 +3209,25 @@ function spawnInfantryArmySoldier(options = {}) {
 
 function spawnBoss(level) {
   const loadout = chooseSpawnLoadout(level);
-  const bossHp = Math.max(1, Math.round(100 * (4 + level * 0.28) * SPECIAL_ENEMY_HP_SCALE));
+  const isLevelTenBoss = level === BOSS_LEVEL_INTERVAL;
+  const bossHp = isLevelTenBoss
+    ? Math.max(1, Math.round(player.maxHp * LEVEL_TEN_BOSS_HP_MULTIPLIER))
+    : Math.max(1, Math.round(100 * (4 + level * 0.28) * SPECIAL_ENEMY_HP_SCALE));
   const side = Math.floor(Math.random() * 4);
   const x = side === 1 ? world.w - 120 : side === 3 ? 120 : Math.random() * world.w;
   const y = side === 0 ? 120 : side === 2 ? world.h - 120 : Math.random() * world.h;
+  const bossMods = { ...loadout.mods };
   enemies.push({
     id: nextEnemyId,
     team: "enemy",
     boss: true,
     tankKey: loadout.tankKey,
-    buildName: `Boss ${loadout.buildName}`,
+    buildName: isLevelTenBoss ? `Level 10 Boss ${loadout.buildName}` : `Boss ${loadout.buildName}`,
     color: "#5b2d2d",
     accent: loadout.accent,
-    mods: loadout.mods,
+    mods: bossMods,
     level,
+    damageMult: isLevelTenBoss ? LEVEL_TEN_BOSS_DAMAGE_MULTIPLIER : 1,
     x,
     y,
     r: 38,
@@ -3277,7 +3372,7 @@ function enemyPunchAttack(enemy, target) {
   const reach = 48 * enemy.mods.range;
   const width = 0.76;
   if (!isInCone(enemy, target, enemy.angle, reach + enemy.r + target.r, width)) return;
-  const damage = 6 + enemy.level * 0.7;
+  const damage = enemyAttackDamage(enemy, 6 + enemy.level * 0.7);
   enemy.punchAnim = 0.18;
   enemy.punchSide = (enemy.punchSide || 1) * -1;
   if (target === player) {
@@ -3502,6 +3597,10 @@ function firePlayer(dt, target) {
   }
   if (player.tankKey === "tazer" && keys.has("x") && player.tazerGuardCooldown <= 0 && player.tazerGuardActive <= 0) {
     startTazerGuard();
+  }
+  if (player.tankKey === "tazer" && keys.has("b")) {
+    startTazerFocusStorm();
+    keys.delete("b");
   }
   if (player.tankKey === "dragonTamer" && keys.has("e") && player.dragonCooldown <= 0) {
     player.dragonCooldown = DRAGON_HORDE_COOLDOWN;
@@ -4310,7 +4409,7 @@ function enemyFire(enemy, target = player) {
         damage:
           enemy.team === "ally"
             ? RAILGUN_DPS * enemy.mods.shellDamage * 0.08 * ALLY_POWER_MULTIPLIER
-            : Math.max(2.5, RAILGUN_DPS * enemy.mods.shellDamage * 0.024),
+            : enemyAttackDamage(enemy, Math.max(2.5, RAILGUN_DPS * enemy.mods.shellDamage * 0.024)),
         hp: 9999,
         r: 7 * enemy.mods.beamWidth,
         color: enemy.team === "ally" ? "#9df29e" : "#88f7ff",
@@ -4391,6 +4490,11 @@ function addTankShot(tank, angle, shot) {
     angle: shot.angle ?? angle,
     ownerRemoteId: tank.remoteId,
   };
+  if (tank.team !== "ally") {
+    const damageMult = tank.damageMult || 1;
+    projectile.damage *= damageMult;
+    projectile.hp *= damageMult;
+  }
   if (tank.team === "ally") {
     bullets.push({
       ...projectile,
@@ -4519,7 +4623,7 @@ function tankFlameAttack(tank, target, dt) {
   });
   if (!target || !isInCone(tank, target, tank.angle, reach, width)) return;
 
-  const damage = FLAME_DPS * (tank.team === "ally" ? ALLY_POWER_MULTIPLIER : 1);
+  const damage = tank.team === "ally" ? FLAME_DPS * ALLY_POWER_MULTIPLIER : enemyAttackDamage(tank, FLAME_DPS);
   target.hp -= target === player ? playerIncomingDamage(damage * dt) : damage * dt;
   if (!target.hitFlash) markHit(target, 0.4, tank);
   if (target !== player) {
@@ -5873,9 +5977,10 @@ function updateEnemies(dt) {
       if (Math.random() < 8 * dt) addSpark(enemy.x, enemy.y, "#ff8e33", 1);
     }
     if (player.tankKey !== "helicopter" && enemy.team !== "ally" && distance(enemy, player) < enemy.r + player.r && player.invuln <= 0) {
-      player.hp -= playerIncomingDamage(2);
+      const touchDamage = enemyAttackDamage(enemy, 2);
+      player.hp -= playerIncomingDamage(touchDamage);
       player.invuln = 0.35;
-      markHit(player, 2, enemy);
+      markHit(player, touchDamage, enemy);
       addSpark(player.x, player.y, "#e65735", 8);
       if (player.hp <= 0) endGame();
     }
@@ -5996,6 +6101,7 @@ function updateParticles(dt) {
   }
   updateTazerCannonTraps(dt);
   updateTazerCannonWaves(dt);
+  updateTazerFocusStorms(dt);
   if (flames.length > MAX_FLAMES) flames.splice(0, flames.length - MAX_FLAMES);
   for (let i = flames.length - 1; i >= 0; i -= 1) {
     flames[i].life -= dt;
@@ -7531,7 +7637,7 @@ function drawHud() {
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "rgba(11,15,12,0.72)";
-  const panelHeight = player.tankKey === "railgun" ? 196 : player.tankKey === "dragonTamer" ? 226 : player.tankKey === "tazer" ? 316 : player.tankKey === "gamma" ? 166 : 136;
+  const panelHeight = player.tankKey === "railgun" ? 196 : player.tankKey === "dragonTamer" ? 226 : player.tankKey === "tazer" ? 346 : player.tankKey === "gamma" ? 166 : 136;
   roundRect(pad, pad, 360 * camera.scale, panelHeight * camera.scale, 8 * camera.scale);
   ctx.fill();
   ctx.fillStyle = "#f5f4eb";
@@ -7622,7 +7728,17 @@ function drawHud() {
       "#d7fbff",
       player.tazerGuardActive > 0 ? `X guard active ${player.tazerGuardActive.toFixed(1)}s` : `X guard ${Math.ceil(player.tazerGuardCooldown || 0)}s`
     );
-    infoY = 292;
+    const focusStorm = tazerFocusStorms[0];
+    bar(
+      pad + 16 * camera.scale,
+      pad + 288 * camera.scale,
+      310 * camera.scale,
+      12 * camera.scale,
+      focusStorm ? 1 - focusStorm.strikesLeft / TAZER_FOCUS_STRIKES : 1,
+      "#fff06d",
+      focusStorm ? `B focus ${focusStorm.strikesLeft} bolts` : "B focus ready - 95% max HP"
+    );
+    infoY = 322;
   } else if (player.tankKey === "dragonTamer") {
     bar(
       pad + 16 * camera.scale,
