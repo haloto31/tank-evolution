@@ -50,6 +50,7 @@ const TAZER_CHAIN_JUMPS = 5;
 const TAZER_CHAIN_JUMP_RANGE = 230;
 const TAZER_BEAM_COOLDOWN = 12;
 const TAZER_BEAM_DAMAGE = 145;
+const TAZER_BEAM_DURATION = 2;
 const TAZER_MINI_COOLDOWN = 50;
 const TAZER_MINI_COUNT = 3;
 const TAZER_MINI_DAMAGE = 20;
@@ -143,6 +144,7 @@ const player = {
   gammaStormCooldown: 0,
   tazerCooldown: 0,
   tazerBeamCooldown: 0,
+  tazerBeamActive: 0,
   tazerMiniCooldown: 0,
   tazerEnergy: 1,
   railEnergy: 1,
@@ -1155,6 +1157,7 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
     gammaStormCooldown: 0,
     tazerCooldown: 0,
     tazerBeamCooldown: 0,
+    tazerBeamActive: 0,
     tazerMiniCooldown: 0,
     tazerEnergy: 1,
     railEnergy: 1,
@@ -2277,7 +2280,7 @@ function tazerScreenStun() {
   camera.shake = Math.max(camera.shake, stunned > 0 ? 7 : 2);
 }
 
-function tazerGiantBeam() {
+function tazerGiantBeam(dt = 1) {
   const reach = 720;
   const beamRadius = 58;
   const muzzle = {
@@ -2294,8 +2297,8 @@ function tazerGiantBeam() {
     angle: player.angle,
     range: reach,
     r: beamRadius,
-    life: 0.34,
-    max: 0.34,
+    life: 0.09,
+    max: 0.09,
     color: "#fff06d",
     large: true,
     width: 32,
@@ -2310,15 +2313,15 @@ function tazerGiantBeam() {
     const along = distanceAlongBeam(beam, enemy);
     if (along < 0 || along > reach) return;
     if (distanceToBeam(beam, enemy) > enemy.r + beam.r) return;
-    const damage = enemyIncomingDamage(enemy, playerDamage(TAZER_BEAM_DAMAGE * player.mods.shellDamage, enemy));
+    const damage = enemyIncomingDamage(enemy, playerDamage(TAZER_BEAM_DAMAGE * player.mods.shellDamage * dt, enemy));
     enemy.hp -= damage;
-    enemy.stun = Math.max(enemy.stun || 0, 0.65);
+    enemy.stun = Math.max(enemy.stun || 0, 0.18);
     markHit(enemy, damage, { x: muzzle.x, y: muzzle.y, kind: "tazerBeam", noKnockback: true });
-    if (hits < 10) addSpark(enemy.x, enemy.y, "#fff06d", 5);
+    if (hits < 5) addSpark(enemy.x, enemy.y, "#fff06d", 2);
     hits += 1;
   });
-  addSpark(muzzle.x, muzzle.y, "#fff06d", 10);
-  camera.shake = Math.max(camera.shake, hits > 0 ? 8 : 4);
+  addSpark(muzzle.x, muzzle.y, "#fff06d", 2);
+  camera.shake = Math.max(camera.shake, hits > 0 ? 4 : 2);
 }
 
 function summonMiniTasers() {
@@ -3085,8 +3088,12 @@ function firePlayer(dt, target) {
   player.gammaStormCooldown = Math.max(0, (player.gammaStormCooldown || 0) - dt);
   player.tazerCooldown = Math.max(0, (player.tazerCooldown || 0) - dt);
   player.tazerBeamCooldown = Math.max(0, (player.tazerBeamCooldown || 0) - dt);
+  player.tazerBeamActive = Math.max(0, (player.tazerBeamActive || 0) - dt);
   player.tazerMiniCooldown = Math.max(0, (player.tazerMiniCooldown || 0) - dt);
   player.railGiantCooldown = Math.max(0, (player.railGiantCooldown || 0) - dt);
+  if (player.tankKey === "tazer" && player.tazerBeamActive > 0) {
+    tazerGiantBeam(dt);
+  }
   if (player.tankKey === "trooper" && keys.has("e") && player.trooperHeliCooldown <= 0) {
     player.trooperHeliCooldown = TROOPER_HELI_COOLDOWN;
     sendTrooperHelicopter();
@@ -3106,7 +3113,8 @@ function firePlayer(dt, target) {
   }
   if (player.tankKey === "tazer" && keys.has("q") && player.tazerBeamCooldown <= 0) {
     player.tazerBeamCooldown = TAZER_BEAM_COOLDOWN;
-    tazerGiantBeam();
+    player.tazerBeamActive = TAZER_BEAM_DURATION;
+    tazerGiantBeam(dt);
   }
   if (player.tankKey === "tazer" && keys.has("z") && player.tazerMiniCooldown <= 0) {
     player.tazerMiniCooldown = TAZER_MINI_COOLDOWN;
@@ -7071,7 +7079,7 @@ function drawHud() {
       12 * camera.scale,
       1 - (player.tazerBeamCooldown || 0) / TAZER_BEAM_COOLDOWN,
       "#fff06d",
-      `Q giant beam ${Math.ceil(player.tazerBeamCooldown || 0)}s`
+      player.tazerBeamActive > 0 ? `Q beam active ${player.tazerBeamActive.toFixed(1)}s` : `Q giant beam ${Math.ceil(player.tazerBeamCooldown || 0)}s`
     );
     bar(
       pad + 16 * camera.scale,
