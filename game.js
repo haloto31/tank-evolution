@@ -79,6 +79,7 @@ const TAZER_FOCUS_STRIKES = 200;
 const TAZER_FOCUS_DAMAGE = 400;
 const TAZER_FOCUS_INTERVAL = 0.012;
 const TAZER_FOCUS_MAX_HP_MULTIPLIER = 0.05;
+const TAZER_FOCUS_COOLDOWN = 70;
 const TAZER_GUARD_COOLDOWN = 45;
 const TAZER_GUARD_DURATION = 10;
 const TAZER_GUARD_DAMAGE_MULTIPLIER = 0.4;
@@ -191,6 +192,7 @@ const player = {
   tazerCannonCooldown: 0,
   tazerGuardCooldown: 0,
   tazerGuardActive: 0,
+  tazerFocusCooldown: 0,
   tazerEnergy: 1,
   railEnergy: 1,
   railGiantCooldown: 0,
@@ -1220,6 +1222,7 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
     tazerCannonCooldown: 0,
     tazerGuardCooldown: 0,
     tazerGuardActive: 0,
+    tazerFocusCooldown: 0,
     tazerEnergy: 1,
     railEnergy: 1,
     railGiantCooldown: 0,
@@ -3584,6 +3587,7 @@ function firePlayer(dt, target) {
   }
   player.tazerMiniCooldown = Math.max(0, (player.tazerMiniCooldown || 0) - dt);
   player.tazerCannonCooldown = Math.max(0, (player.tazerCannonCooldown || 0) - dt);
+  player.tazerFocusCooldown = Math.max(0, (player.tazerFocusCooldown || 0) - dt);
   player.railGiantCooldown = Math.max(0, (player.railGiantCooldown || 0) - dt);
   if (player.tankKey === "tazer" && player.tazerBeamActive > 0) {
     tazerGiantBeam(dt);
@@ -3621,7 +3625,9 @@ function firePlayer(dt, target) {
     startTazerGuard();
   }
   if (player.tankKey === "tazer" && keys.has("b")) {
-    startTazerFocusStorm();
+    if (player.tazerFocusCooldown <= 0 && startTazerFocusStorm()) {
+      player.tazerFocusCooldown = TAZER_FOCUS_COOLDOWN;
+    }
     keys.delete("b");
   }
   if (player.tankKey === "dragonTamer" && keys.has("e") && player.dragonCooldown <= 0) {
@@ -7789,9 +7795,9 @@ function drawHud() {
       pad + 288 * camera.scale,
       310 * camera.scale,
       12 * camera.scale,
-      focusStorm ? 1 - focusStorm.strikesLeft / TAZER_FOCUS_STRIKES : 1,
+      focusStorm ? 1 - focusStorm.strikesLeft / TAZER_FOCUS_STRIKES : 1 - (player.tazerFocusCooldown || 0) / TAZER_FOCUS_COOLDOWN,
       "#fff06d",
-      focusStorm ? `B focus ${focusStorm.strikesLeft} bolts` : "B focus ready - 95% max HP"
+      focusStorm ? `B focus ${focusStorm.strikesLeft} bolts` : player.tazerFocusCooldown > 0 ? `B focus ${Math.ceil(player.tazerFocusCooldown)}s` : "B focus ready - 95% max HP"
     );
     infoY = 322;
   } else if (player.tankKey === "dragonTamer") {
