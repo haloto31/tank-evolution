@@ -279,6 +279,49 @@ h2 {
   font-weight: 700;
 }
 
+.wave-skip-panel {
+  align-items: end;
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(180px, 1.2fr) minmax(150px, 1fr);
+  gap: 12px;
+  margin: 0 0 18px;
+}
+
+.wave-skip-panel label {
+  display: grid;
+  gap: 6px;
+}
+
+.wave-skip-panel span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.wave-skip-panel input {
+  min-height: 42px;
+  width: 100%;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 800;
+  padding: 9px 12px;
+}
+
+.wave-skip-status {
+  min-height: 42px;
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.84rem;
+  font-weight: 900;
+  line-height: 1.2;
+  align-content: center;
+}
+
 .tank-card,
 .upgrade-card {
   min-height: 240px;
@@ -352,7 +395,8 @@ button:focus-visible {
 
   .tank-grid,
   .upgrade-grid,
-  .mode-grid {
+  .mode-grid,
+  .wave-skip-panel {
     grid-template-columns: 1fr;
   }
 

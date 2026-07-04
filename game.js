@@ -14,6 +14,9 @@ const upgradeGrid = document.getElementById("upgrade-grid");
 const pendingUpgradePanel = document.getElementById("pending-upgrade-panel");
 const pendingUpgradeList = document.getElementById("pending-upgrade-list");
 const pendingUpgradeCount = document.getElementById("pending-upgrade-count");
+const waveSkipInput = document.getElementById("wave-skip-input");
+const waveSkipPassword = document.getElementById("wave-skip-password");
+const waveSkipStatus = document.getElementById("wave-skip-status");
 const finalStats = document.getElementById("final-stats");
 const resumeButton = document.getElementById("resume-button");
 const restartButton = document.getElementById("restart-button");
@@ -116,6 +119,7 @@ const LEVEL_TEN_BOSS_DAMAGE_MULTIPLIER = 50;
 const FINAL_BOSS_LEVEL = 20;
 const FINAL_BOSS_DAMAGE_MULTIPLIER = 1 / 3;
 const FINAL_BOSS_RELOAD = 5;
+const WAVE_SKIP_PASSWORD = "01028224915";
 const MAX_EVOLUTION_STAGE = 30;
 const MAX_SPARKS = 24;
 const MAX_LIGHTNING = 24;
@@ -1190,8 +1194,45 @@ function tankHpMultiplier(tankKey) {
   return tankKey === "railgun" ? 0.6 : 1;
 }
 
+function xpNextForLevel(level) {
+  let xpNext = 100;
+  for (let current = 1; current < level; current += 1) {
+    xpNext = Math.ceil(xpNext * 1.5);
+  }
+  return xpNext;
+}
+
+function requestedWaveSkip() {
+  const requestedWave = Math.floor(Number(waveSkipInput?.value || 1));
+  const password = waveSkipPassword?.value.trim() || "";
+  if (!Number.isFinite(requestedWave) || requestedWave <= 1) {
+    if (waveSkipStatus) waveSkipStatus.textContent = "";
+    return 1;
+  }
+  if (password !== WAVE_SKIP_PASSWORD) {
+    if (waveSkipStatus) waveSkipStatus.textContent = "Wrong password. Starting at wave 1.";
+    return 1;
+  }
+  const wave = clamp(requestedWave, 1, 100);
+  if (waveSkipStatus) waveSkipStatus.textContent = `Starting at wave ${wave}.`;
+  return wave;
+}
+
+function applyWaveSkip(wave) {
+  if (wave <= 1) return;
+  player.level = wave;
+  player.xp = 0;
+  player.xpNext = xpNextForLevel(wave);
+  if (!player.lockedTank) {
+    player.maxHp = Math.max(1, Math.round(scaledTankMaxHp(wave) * (player.perks.maxHpMult || 1) * (player.maxHpPenaltyMult || 1)));
+    player.hp = player.maxHp;
+  }
+  player.tankStage = Math.min(MAX_EVOLUTION_STAGE, Math.max(player.tankStage || 1, wave));
+}
+
 function resetGame(tankKey = "default", mode = selectedGameMode) {
   const starter = starters.find((tank) => tank.key === tankKey);
+  const skipWave = requestedWaveSkip();
   const starterLoadout = starter.variant ? createVariantLoadout(starter.variant, 1) : null;
   const starterPerks = starter.perks || {};
   const baseMaxHp = starter.variant === "defaultUltra" ? 100000 : Math.round(100 * (starterPerks.maxHpMult || 1));
@@ -1271,6 +1312,7 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
   enemies.length = 0;
   pendingUpgradeTokens = 0;
   upgradeChoices = [];
+  applyWaveSkip(skipWave);
   sparks.length = 0;
   lightning.length = 0;
   nukes.length = 0;
@@ -1289,7 +1331,7 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
   if (activeGameMode === "infantryArmy") {
     spawnInfantryArmyArrow();
   }
-  if (player.lockedTank && activeGameMode !== "infantryArmy") {
+  if (activeGameMode !== "infantryArmy" && (player.lockedTank || player.level % BOSS_LEVEL_INTERVAL === 0)) {
     bossSpawnedLevels.add(player.level);
     spawnBoss(player.level);
   }

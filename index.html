@@ -35,6 +35,17 @@
               <span>Fight waves of AK infantry as your tank</span>
             </button>
           </div>
+          <div class="wave-skip-panel" aria-label="Password wave skip">
+            <label>
+              <span>Skip to wave</span>
+              <input id="wave-skip-input" type="number" min="1" max="100" value="1" inputmode="numeric" />
+            </label>
+            <label>
+              <span>Password</span>
+              <input id="wave-skip-password" type="password" inputmode="numeric" autocomplete="off" />
+            </label>
+            <p id="wave-skip-status" class="wave-skip-status" aria-live="polite"></p>
+          </div>
           <div class="tank-grid" id="tank-grid"></div>
           <p class="hint">Move with WASD or arrow keys. Aim with the mouse. Click or hold Space to fire. Press Esc to pause.</p>
         </div>
