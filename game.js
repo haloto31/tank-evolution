@@ -1690,7 +1690,12 @@ function lowRegenTank(tank) {
   return tank.tankKey === "railgun" || tank.tankKey === "juggernaut" || tank.tankKey === "gamma";
 }
 
+function regenDisabledLevel() {
+  return player.level === FINAL_BOSS_LEVEL || player.level === VICTORY_BOSS_LEVEL;
+}
+
 function regenAmount(tank, dt) {
+  if (regenDisabledLevel()) return 0;
   if (tank.tankKey === "trooper") return 0;
   if (tank.miniTazer) return 0;
   if (tank.tankKey === "infantry") return tank.maxHp * 0.01 * dt;
@@ -2707,7 +2712,7 @@ function updateTazerGuard(dt) {
   player.tazerGuardCooldown = Math.max(0, (player.tazerGuardCooldown || 0) - dt);
   const wasActive = (player.tazerGuardActive || 0) > 0;
   player.tazerGuardActive = Math.max(0, (player.tazerGuardActive || 0) - dt);
-  if (player.tankKey === "tazer" && player.tazerGuardActive > 0) {
+  if (player.tankKey === "tazer" && player.tazerGuardActive > 0 && !regenDisabledLevel()) {
     player.hp = Math.min(player.maxHp, player.hp + TAZER_GUARD_REGEN_PER_SECOND * dt);
   }
   if (player.tankKey !== "tazer" || !wasActive || player.tazerGuardActive > 0) return;
