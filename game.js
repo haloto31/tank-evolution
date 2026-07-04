@@ -46,6 +46,8 @@ const TAZER_STUN_COOLDOWN = 20;
 const TAZER_SCREEN_STUN_SECONDS = 10;
 const TAZER_CHAIN_DAMAGE = 18;
 const TAZER_CHAIN_RANGE = 360;
+const TAZER_CHAIN_JUMPS = 5;
+const TAZER_CHAIN_JUMP_RANGE = 230;
 const TAZER_BEAM_COOLDOWN = 12;
 const TAZER_BEAM_DAMAGE = 145;
 const TAZER_MINI_COOLDOWN = 50;
@@ -2195,19 +2197,55 @@ function tazerChainAttack() {
   lightning.push(zap);
   if (lightning.length > MAX_LIGHTNING) lightning.splice(0, lightning.length - MAX_LIGHTNING);
 
-  let hits = 0;
+  let firstTarget = null;
+  let firstAlong = Infinity;
   enemies.forEach((enemy) => {
     if (enemy.team === "ally" || enemy.hp <= 0) return;
     const along = distanceAlongBeam(zap, enemy);
-    if (along < 0 || along > reach) return;
+    if (along < 0 || along > reach || along >= firstAlong) return;
     if (distanceToBeam(zap, enemy) > enemy.r + zap.r) return;
-    const hitDamage = enemyIncomingDamage(enemy, playerDamage(TAZER_CHAIN_DAMAGE * player.mods.shellDamage, enemy));
-    enemy.hp -= hitDamage;
-    enemy.stun = Math.max(enemy.stun || 0, 0.35);
-    markHit(enemy, hitDamage, { x: muzzle.x, y: muzzle.y, kind: "tazer", noKnockback: true });
-    if (hits < 6) addSpark(enemy.x, enemy.y, "#ffe66d", 2);
-    hits += 1;
+    firstTarget = enemy;
+    firstAlong = along;
   });
+
+  let hits = 0;
+  let current = firstTarget;
+  let previous = muzzle;
+  let damage = TAZER_CHAIN_DAMAGE * player.mods.shellDamage;
+  const hit = new Set();
+  while (current && hits < TAZER_CHAIN_JUMPS) {
+    hit.add(current.id);
+    const hitDamage = enemyIncomingDamage(current, playerDamage(damage, current));
+    current.hp -= hitDamage;
+    current.stun = Math.max(current.stun || 0, 0.35);
+    markHit(current, hitDamage, { x: previous.x, y: previous.y, kind: "tazer", noKnockback: true });
+    lightning.push({
+      x1: previous.x,
+      y1: previous.y,
+      x2: current.x,
+      y2: current.y,
+      life: 0.1,
+      max: 0.1,
+      color: "#ffe66d",
+      width: hits === 0 ? 5 : 3,
+    });
+    if (hits < 5) addSpark(current.x, current.y, "#ffe66d", 2);
+    hits += 1;
+    previous = current;
+    damage *= 0.78;
+    let nextTarget = null;
+    let best = TAZER_CHAIN_JUMP_RANGE * TAZER_CHAIN_JUMP_RANGE;
+    enemies.forEach((enemy) => {
+      if (enemy.team === "ally" || enemy.hp <= 0 || hit.has(enemy.id)) return;
+      const d = distanceSq(current, enemy);
+      if (d < best) {
+        best = d;
+        nextTarget = enemy;
+      }
+    });
+    current = nextTarget;
+  }
+  if (lightning.length > MAX_LIGHTNING) lightning.splice(0, lightning.length - MAX_LIGHTNING);
   addSpark(muzzle.x, muzzle.y, "#ffe66d", 3);
   if (hits > 0) camera.shake = Math.max(camera.shake, 2.4);
 }
