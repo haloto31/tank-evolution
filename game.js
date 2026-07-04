@@ -260,6 +260,7 @@ const starters = [
     accent: "#ffe66d",
     description: "Shoots front-facing chain lightning. Press E to stun every visible enemy for 10 seconds.",
     stats: ["Front lightning", "Chain zap", "E screen stun"],
+    perks: { maxHpMult: 2 },
   },
   {
     key: "shotgun",
@@ -1135,6 +1136,7 @@ function scaledTankMaxHp(level) {
 }
 
 function tankHpMultiplier(tankKey) {
+  if (tankKey === "tazer") return 2;
   return tankKey === "railgun" ? 0.6 : 1;
 }
 
