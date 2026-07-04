@@ -48,6 +48,9 @@ const TAZER_CHAIN_DAMAGE = 18;
 const TAZER_CHAIN_RANGE = 360;
 const TAZER_BEAM_COOLDOWN = 12;
 const TAZER_BEAM_DAMAGE = 145;
+const TAZER_MINI_COOLDOWN = 50;
+const TAZER_MINI_COUNT = 3;
+const TAZER_MINI_DAMAGE = 20;
 const TAZER_ENERGY_DRAIN = 0.34;
 const TAZER_ENERGY_REGEN = 0.26;
 const RAILGUN_DPS = 95;
@@ -138,6 +141,7 @@ const player = {
   gammaStormCooldown: 0,
   tazerCooldown: 0,
   tazerBeamCooldown: 0,
+  tazerMiniCooldown: 0,
   tazerEnergy: 1,
   railEnergy: 1,
   railGiantCooldown: 0,
@@ -1149,6 +1153,7 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
     gammaStormCooldown: 0,
     tazerCooldown: 0,
     tazerBeamCooldown: 0,
+    tazerMiniCooldown: 0,
     tazerEnergy: 1,
     railEnergy: 1,
     railGiantCooldown: 0,
@@ -1534,6 +1539,7 @@ function allyMaxHp() {
 function regenAmount(tank, dt) {
   if (tank.mods?.nukeExplosion && tank.tankKey !== "airstrike") return 0;
   if (tank.tankKey === "trooper") return 0;
+  if (tank.miniTazer) return 0;
   if (tank.tankKey === "infantry") return tank.maxHp * 0.01 * dt;
   const airstrikeRegen = tank.tankKey === "airstrike" ? 1.25 : 1;
   const mult = (tank === player ? player.perks.regenMult || 1 : 1) * airstrikeRegen;
@@ -2277,6 +2283,91 @@ function tazerGiantBeam() {
   camera.shake = Math.max(camera.shake, hits > 0 ? 8 : 4);
 }
 
+function summonMiniTasers() {
+  const baseAngle = player.angle;
+  const sideX = Math.cos(baseAngle + Math.PI / 2);
+  const sideY = Math.sin(baseAngle + Math.PI / 2);
+  for (let i = 0; i < TAZER_MINI_COUNT; i += 1) {
+    const offset = (i - 1) * 34;
+    const x = clamp(player.x - Math.cos(baseAngle) * 36 + sideX * offset, 24, world.w - 24);
+    const y = clamp(player.y - Math.sin(baseAngle) * 36 + sideY * offset, 24, world.h - 24);
+    enemies.push({
+      id: nextEnemyId,
+      team: "ally",
+      tankKey: "tazer",
+      miniTazer: true,
+      buildName: "Mini Taser",
+      color: "#1b263b",
+      accent: "#fff06d",
+      mods: { range: 1, shellDamage: 1, fireRate: 1, beamWidth: 1 },
+      level: player.level,
+      x,
+      y,
+      r: 12,
+      hp: 10,
+      maxHp: 10,
+      speed: 165,
+      angle: baseAngle,
+      strategy: "support",
+      cooldown: 0.35 + i * 0.12,
+      burn: 0,
+      burnDps: 0,
+    });
+    nextEnemyId += 1;
+    addSpark(x, y, "#fff06d", 8);
+  }
+  camera.shake = Math.max(camera.shake, 3);
+}
+
+function updateMiniTazer(mini, dt) {
+  mini.cooldown -= dt;
+  const target = findNearestTank(mini, "enemy");
+  if (!target) return;
+  mini.angle = angleTo(mini, target);
+  const targetDistance = distance(mini, target);
+  const desiredDistance = 265;
+  if (targetDistance > desiredDistance) {
+    const avoid = barrierAvoidanceVector(mini, Math.cos(mini.angle), Math.sin(mini.angle));
+    let vx = Math.cos(mini.angle) + avoid.x * 1.2;
+    let vy = Math.sin(mini.angle) + avoid.y * 1.2;
+    const len = Math.hypot(vx, vy) || 1;
+    mini.x = clamp(mini.x + (vx / len) * mini.speed * dt, 24, world.w - 24);
+    mini.y = clamp(mini.y + (vy / len) * mini.speed * dt, 24, world.h - 24);
+    resolveMapCollision(mini);
+  } else if (targetDistance < 160) {
+    mini.x = clamp(mini.x - Math.cos(mini.angle) * mini.speed * 0.7 * dt, 24, world.w - 24);
+    mini.y = clamp(mini.y - Math.sin(mini.angle) * mini.speed * 0.7 * dt, 24, world.h - 24);
+    resolveMapCollision(mini);
+  }
+  if (mini.cooldown > 0 || targetDistance > 560) return;
+  miniTazerBeam(mini);
+  mini.cooldown = 2.2;
+}
+
+function miniTazerBeam(mini) {
+  const reach = 540;
+  bullets.push({
+    kind: "allyBeam",
+    x: mini.x + Math.cos(mini.angle) * 22,
+    y: mini.y + Math.sin(mini.angle) * 22,
+    vx: Math.cos(mini.angle),
+    vy: Math.sin(mini.angle),
+    angle: mini.angle,
+    age: 0,
+    life: 0.14,
+    range: reach,
+    damage: TAZER_MINI_DAMAGE,
+    hp: 9999,
+    pierceLeft: 999,
+    hitEnemies: new Set(),
+    r: 16,
+    color: "#fff06d",
+    noStun: true,
+  });
+  if (bullets.length > MAX_PLAYER_BULLETS) bullets.splice(0, bullets.length - MAX_PLAYER_BULLETS);
+  addSpark(mini.x + Math.cos(mini.angle) * 24, mini.y + Math.sin(mini.angle) * 24, "#fff06d", 2);
+}
+
 function enemyStrategyFor(loadout, boss = false) {
   if (boss) return "boss";
   if (loadout.tankKey === "dragonTamer") return "artillery";
@@ -2956,6 +3047,7 @@ function firePlayer(dt, target) {
   player.gammaStormCooldown = Math.max(0, (player.gammaStormCooldown || 0) - dt);
   player.tazerCooldown = Math.max(0, (player.tazerCooldown || 0) - dt);
   player.tazerBeamCooldown = Math.max(0, (player.tazerBeamCooldown || 0) - dt);
+  player.tazerMiniCooldown = Math.max(0, (player.tazerMiniCooldown || 0) - dt);
   player.railGiantCooldown = Math.max(0, (player.railGiantCooldown || 0) - dt);
   if (player.tankKey === "trooper" && keys.has("e") && player.trooperHeliCooldown <= 0) {
     player.trooperHeliCooldown = TROOPER_HELI_COOLDOWN;
@@ -2977,6 +3069,10 @@ function firePlayer(dt, target) {
   if (player.tankKey === "tazer" && keys.has("q") && player.tazerBeamCooldown <= 0) {
     player.tazerBeamCooldown = TAZER_BEAM_COOLDOWN;
     tazerGiantBeam();
+  }
+  if (player.tankKey === "tazer" && keys.has("z") && player.tazerMiniCooldown <= 0) {
+    player.tazerMiniCooldown = TAZER_MINI_COOLDOWN;
+    summonMiniTasers();
   }
   if (player.tankKey === "dragonTamer" && keys.has("e") && player.dragonCooldown <= 0) {
     player.dragonCooldown = DRAGON_HORDE_COOLDOWN;
@@ -5233,6 +5329,14 @@ function updateEnemies(dt) {
       }
       continue;
     }
+    if (enemy.miniTazer) {
+      updateMiniTazer(enemy, dt);
+      if (enemy.hp <= 0) {
+        addSpark(enemy.x, enemy.y, "#fff06d", 9);
+        enemies.splice(i, 1);
+      }
+      continue;
+    }
     if (enemy.team === "ally" && !enemy.deployedShielder) {
       const newMaxHp = allyMaxHp();
       if (newMaxHp !== enemy.maxHp) {
@@ -6867,7 +6971,7 @@ function drawHud() {
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "rgba(11,15,12,0.72)";
-  const panelHeight = player.tankKey === "railgun" ? 196 : player.tankKey === "dragonTamer" ? 226 : player.tankKey === "tazer" ? 226 : player.tankKey === "gamma" ? 166 : 136;
+  const panelHeight = player.tankKey === "railgun" ? 196 : player.tankKey === "dragonTamer" ? 226 : player.tankKey === "tazer" ? 256 : player.tankKey === "gamma" ? 166 : 136;
   roundRect(pad, pad, 360 * camera.scale, panelHeight * camera.scale, 8 * camera.scale);
   ctx.fill();
   ctx.fillStyle = "#f5f4eb";
@@ -6931,7 +7035,16 @@ function drawHud() {
       "#fff06d",
       `Q giant beam ${Math.ceil(player.tazerBeamCooldown || 0)}s`
     );
-    infoY = 202;
+    bar(
+      pad + 16 * camera.scale,
+      pad + 198 * camera.scale,
+      310 * camera.scale,
+      12 * camera.scale,
+      1 - (player.tazerMiniCooldown || 0) / TAZER_MINI_COOLDOWN,
+      "#d7fbff",
+      `Z mini tasers ${Math.ceil(player.tazerMiniCooldown || 0)}s`
+    );
+    infoY = 232;
   } else if (player.tankKey === "dragonTamer") {
     bar(
       pad + 16 * camera.scale,
