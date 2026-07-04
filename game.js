@@ -1569,8 +1569,13 @@ function playerDamage(amount, target = null) {
   return amount * (player.perks.damageMult || 1) * bossMult;
 }
 
+function tazerStormPenaltyActive() {
+  return player.tankKey === "tazer" && tazerEndStorms.length > 0;
+}
+
 function playerIncomingDamage(amount) {
-  return amount * (player.perks.damageTakenMult || 1);
+  const stormPenalty = tazerStormPenaltyActive() ? 3 : 1;
+  return amount * (player.perks.damageTakenMult || 1) * stormPenalty;
 }
 
 function dragonBurnDamage() {
@@ -5180,8 +5185,9 @@ function update(dt) {
   dy += touchMove.dy;
   const len = Math.hypot(dx, dy) || 1;
   if ((player.stun || 0) <= 0) {
-    player.x = clamp(player.x + (dx / len) * player.speed * dt, 32, world.w - 32);
-    player.y = clamp(player.y + (dy / len) * player.speed * dt, 32, world.h - 32);
+    const stormSpeedMult = tazerStormPenaltyActive() ? 0.5 : 1;
+    player.x = clamp(player.x + (dx / len) * player.speed * stormSpeedMult * dt, 32, world.w - 32);
+    player.y = clamp(player.y + (dy / len) * player.speed * stormSpeedMult * dt, 32, world.h - 32);
   }
 
   if (activeGameMode === "infantryArmy") {
