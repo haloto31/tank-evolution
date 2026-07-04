@@ -20,6 +20,7 @@ const fireTouch = document.getElementById("fire-touch");
 
 const TAU = Math.PI * 2;
 const ENEMY_CAP = 10;
+const ENEMY_HP_MULTIPLIER = 3;
 const INFANTRY_ARMY_CAP = 95;
 const ALLY_SPAWN_CHANCE = 0.01;
 const ALLY_POWER_MULTIPLIER = 0.1;
@@ -2770,7 +2771,7 @@ function spawnEnemy() {
   const enemyLevel = Math.max(1, player.level + 1);
   const isAlly = Math.random() < currentAllyChance();
   const loadout = chooseSpawnLoadout(enemyLevel);
-  const maxHp = isAlly ? allyMaxHp() : Math.max(1, Math.round(scaledTankMaxHp(enemyLevel) * tankHpMultiplier(loadout.tankKey)));
+  const maxHp = isAlly ? allyMaxHp() : Math.max(1, Math.round(scaledTankMaxHp(enemyLevel) * tankHpMultiplier(loadout.tankKey) * ENEMY_HP_MULTIPLIER));
   const side = Math.floor(Math.random() * 4);
   const margin = 90;
   let x = 0;
