@@ -51,6 +51,11 @@ const TAZER_CHAIN_JUMP_RANGE = 230;
 const TAZER_BEAM_COOLDOWN = 12;
 const TAZER_BEAM_DAMAGE = 145;
 const TAZER_BEAM_DURATION = 2;
+const TAZER_END_STORM_STRIKES = 100;
+const TAZER_END_STORM_INTERVAL = 0.055;
+const TAZER_END_STORM_DAMAGE = 30;
+const TAZER_END_STORM_RADIUS = 115;
+const TAZER_END_STORM_STUN = 3;
 const TAZER_MINI_COOLDOWN = 50;
 const TAZER_MINI_COUNT = 3;
 const TAZER_MINI_DAMAGE = 20;
@@ -188,6 +193,7 @@ const sparks = [];
 const lightning = [];
 const nukes = [];
 const gammaStorms = [];
+const tazerEndStorms = [];
 
 const multiplayer = {
   enabled: location.protocol === "http:" || location.protocol === "https:",
@@ -1208,6 +1214,7 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
   lightning.length = 0;
   nukes.length = 0;
   gammaStorms.length = 0;
+  tazerEndStorms.length = 0;
   spawnCarry = 0;
   nextEnemyId = 1;
   infantryArmySpawned = 0;
@@ -2330,6 +2337,51 @@ function tazerGiantBeam(dt = 1) {
   camera.shake = Math.max(camera.shake, hits > 0 ? 4 : 2);
 }
 
+function startTazerEndStorm() {
+  tazerEndStorms.push({
+    strikesLeft: TAZER_END_STORM_STRIKES,
+    timer: 0,
+  });
+  camera.shake = Math.max(camera.shake, 7);
+}
+
+function strikeTazerEndStormOnce(storm) {
+  const halfW = canvas.width / (2 * camera.scale);
+  const halfH = canvas.height / (2 * camera.scale);
+  const x = clamp(camera.x + (Math.random() * 2 - 1) * halfW, 20, world.w - 20);
+  const y = clamp(camera.y + (Math.random() * 2 - 1) * halfH, 20, world.h - 20);
+  const topY = Math.max(0, y - 620 - Math.random() * 120);
+  lightning.push({
+    x1: x + (Math.random() - 0.5) * 110,
+    y1: topY,
+    x2: x,
+    y2: y,
+    life: 0.28,
+    max: 0.28,
+    color: "#fff06d",
+    large: true,
+    skyStrike: true,
+    width: 14,
+    burst: 84,
+  });
+  if (lightning.length > MAX_LIGHTNING) lightning.splice(0, lightning.length - MAX_LIGHTNING);
+
+  let hits = 0;
+  enemies.forEach((enemy) => {
+    if (enemy.team === "ally" || enemy.hp <= 0) return;
+    if (Math.hypot(enemy.x - x, enemy.y - y) > TAZER_END_STORM_RADIUS + enemy.r) return;
+    const damage = enemyIncomingDamage(enemy, playerDamage(TAZER_END_STORM_DAMAGE * player.mods.shellDamage, enemy));
+    enemy.hp -= damage;
+    enemy.stun = Math.max(enemy.stun || 0, TAZER_END_STORM_STUN);
+    markHit(enemy, damage, { x, y: topY, kind: "tazerStorm", noKnockback: true });
+    addSpark(enemy.x, enemy.y, "#fff06d", 4);
+    hits += 1;
+  });
+  addSpark(x, y, "#fff06d", hits > 0 ? 8 : 3);
+  if (hits > 0) camera.shake = Math.max(camera.shake, 4);
+  storm.strikesLeft -= 1;
+}
+
 function summonMiniTasers() {
   const baseAngle = player.angle;
   const sideX = Math.cos(baseAngle + Math.PI / 2);
@@ -3175,7 +3227,11 @@ function firePlayer(dt, target) {
   player.gammaStormCooldown = Math.max(0, (player.gammaStormCooldown || 0) - dt);
   player.tazerCooldown = Math.max(0, (player.tazerCooldown || 0) - dt);
   player.tazerBeamCooldown = Math.max(0, (player.tazerBeamCooldown || 0) - dt);
+  const tazerBeamWasActive = (player.tazerBeamActive || 0) > 0;
   player.tazerBeamActive = Math.max(0, (player.tazerBeamActive || 0) - dt);
+  if (player.tankKey === "tazer" && tazerBeamWasActive && player.tazerBeamActive <= 0) {
+    startTazerEndStorm();
+  }
   player.tazerMiniCooldown = Math.max(0, (player.tazerMiniCooldown || 0) - dt);
   player.railGiantCooldown = Math.max(0, (player.railGiantCooldown || 0) - dt);
   if (player.tankKey === "tazer" && player.tazerBeamActive > 0) {
@@ -5685,6 +5741,15 @@ function updateParticles(dt) {
       storm.timer += GAMMA_STORM_INTERVAL;
     }
     if (storm.strikesLeft <= 0) gammaStorms.splice(i, 1);
+  }
+  for (let i = tazerEndStorms.length - 1; i >= 0; i -= 1) {
+    const storm = tazerEndStorms[i];
+    storm.timer -= dt;
+    while (storm.timer <= 0 && storm.strikesLeft > 0) {
+      strikeTazerEndStormOnce(storm);
+      storm.timer += TAZER_END_STORM_INTERVAL;
+    }
+    if (storm.strikesLeft <= 0) tazerEndStorms.splice(i, 1);
   }
   if (flames.length > MAX_FLAMES) flames.splice(0, flames.length - MAX_FLAMES);
   for (let i = flames.length - 1; i >= 0; i -= 1) {
