@@ -82,8 +82,10 @@ const TAZER_FOCUS_MAX_HP_MULTIPLIER = 0.05;
 const TAZER_FOCUS_COOLDOWN = 70;
 const TAZER_GUARD_COOLDOWN = 45;
 const TAZER_GUARD_DURATION = 10;
-const TAZER_GUARD_DAMAGE_MULTIPLIER = 0.4;
+const TAZER_GUARD_DAMAGE_MULTIPLIER = 0.05;
 const TAZER_GUARD_MAX_HP_MULTIPLIER = 0.5;
+const TAZER_GUARD_TEMP_HP_MULTIPLIER = 2;
+const TAZER_GUARD_REGEN_PER_SECOND = 40;
 const TAZER_ENERGY_DRAIN = 0.34;
 const TAZER_ENERGY_REGEN = 0.26;
 const RAILGUN_DPS = 95;
@@ -192,6 +194,7 @@ const player = {
   tazerCannonCooldown: 0,
   tazerGuardCooldown: 0,
   tazerGuardActive: 0,
+  tazerGuardHpBonus: 0,
   tazerFocusCooldown: 0,
   tazerEnergy: 1,
   railEnergy: 1,
@@ -1222,6 +1225,7 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
     tazerCannonCooldown: 0,
     tazerGuardCooldown: 0,
     tazerGuardActive: 0,
+    tazerGuardHpBonus: 0,
     tazerFocusCooldown: 0,
     tazerEnergy: 1,
     railEnergy: 1,
@@ -2623,6 +2627,10 @@ function updateTazerFocusStorms(dt) {
 function startTazerGuard() {
   player.tazerGuardCooldown = TAZER_GUARD_COOLDOWN;
   player.tazerGuardActive = TAZER_GUARD_DURATION;
+  const baseMaxHp = Math.max(1, player.maxHp - (player.tazerGuardHpBonus || 0));
+  player.tazerGuardHpBonus = Math.max(0, Math.round(baseMaxHp * (TAZER_GUARD_TEMP_HP_MULTIPLIER - 1)));
+  player.maxHp = baseMaxHp + player.tazerGuardHpBonus;
+  player.hp = Math.min(player.maxHp, player.hp + player.tazerGuardHpBonus);
   addSpark(player.x, player.y, "#d7fbff", 18);
   camera.shake = Math.max(camera.shake, 4);
 }
@@ -2631,7 +2639,16 @@ function updateTazerGuard(dt) {
   player.tazerGuardCooldown = Math.max(0, (player.tazerGuardCooldown || 0) - dt);
   const wasActive = (player.tazerGuardActive || 0) > 0;
   player.tazerGuardActive = Math.max(0, (player.tazerGuardActive || 0) - dt);
+  if (player.tankKey === "tazer" && player.tazerGuardActive > 0) {
+    player.hp = Math.min(player.maxHp, player.hp + TAZER_GUARD_REGEN_PER_SECOND * dt);
+  }
   if (player.tankKey !== "tazer" || !wasActive || player.tazerGuardActive > 0) return;
+  const guardBonus = player.tazerGuardHpBonus || 0;
+  if (guardBonus > 0) {
+    player.maxHp = Math.max(1, player.maxHp - guardBonus);
+    player.hp = Math.min(player.hp, player.maxHp);
+    player.tazerGuardHpBonus = 0;
+  }
   player.maxHpPenaltyMult = (player.maxHpPenaltyMult || 1) * TAZER_GUARD_MAX_HP_MULTIPLIER;
   player.maxHp = Math.max(1, Math.round(player.maxHp * TAZER_GUARD_MAX_HP_MULTIPLIER));
   player.hp = Math.min(player.hp, player.maxHp);
@@ -4669,7 +4686,10 @@ function gainXp(amount) {
     player.xpNext = Math.ceil(player.xpNext * 1.5);
     const oldMaxHp = player.maxHp;
     const penaltyMult = player.maxHpPenaltyMult || 1;
-    player.maxHp = player.lockedTank ? player.maxHp : Math.max(1, Math.round(scaledTankMaxHp(player.level) * (player.perks.maxHpMult || 1) * penaltyMult));
+    const guardActive = player.tankKey === "tazer" && (player.tazerGuardActive || 0) > 0;
+    const newBaseMaxHp = player.lockedTank ? Math.max(1, player.maxHp - (player.tazerGuardHpBonus || 0)) : Math.max(1, Math.round(scaledTankMaxHp(player.level) * (player.perks.maxHpMult || 1) * penaltyMult));
+    player.tazerGuardHpBonus = guardActive ? Math.max(0, Math.round(newBaseMaxHp * (TAZER_GUARD_TEMP_HP_MULTIPLIER - 1))) : 0;
+    player.maxHp = newBaseMaxHp + player.tazerGuardHpBonus;
     player.hp = Math.min(player.maxHp, player.hp + 20 + Math.max(0, player.maxHp - oldMaxHp));
     if (activeGameMode !== "infantryArmy" && (player.lockedTank || player.level % BOSS_LEVEL_INTERVAL === 0) && !bossSpawnedLevels.has(player.level)) {
       bossSpawnedLevels.add(player.level);
