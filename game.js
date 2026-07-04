@@ -1077,6 +1077,12 @@ const enemyFamilies = {
     accent: "#88f7ff",
     variants: upgradePools.railgun,
   },
+  tazer: {
+    baseName: "Tazer Tank",
+    color: "#17283d",
+    accent: "#ffe66d",
+    variants: upgradePools.tazer,
+  },
   shotgun: {
     baseName: "Shotgun Tank",
     color: "#927c66",
@@ -2328,6 +2334,9 @@ function summonMiniTasers() {
   const baseAngle = player.angle;
   const sideX = Math.cos(baseAngle + Math.PI / 2);
   const sideY = Math.sin(baseAngle + Math.PI / 2);
+  const levelPower = Math.max(0, player.level - 1);
+  const miniMaxHp = Math.round(10 + levelPower * 3.5);
+  const miniDamage = TAZER_MINI_DAMAGE * (1 + levelPower * 0.08);
   for (let i = 0; i < TAZER_MINI_COUNT; i += 1) {
     const offset = (i - 1) * 34;
     const x = clamp(player.x - Math.cos(baseAngle) * 36 + sideX * offset, 24, world.w - 24);
@@ -2345,9 +2354,10 @@ function summonMiniTasers() {
       x,
       y,
       r: 12,
-      hp: 10,
-      maxHp: 10,
-      speed: 165,
+      hp: miniMaxHp,
+      maxHp: miniMaxHp,
+      speed: Math.min(245, 165 + levelPower * 3),
+      miniDamage,
       angle: baseAngle,
       strategy: "support",
       cooldown: 0.35 + i * 0.12,
@@ -2382,7 +2392,7 @@ function updateMiniTazer(mini, dt) {
   }
   if (mini.cooldown > 0 || targetDistance > 560) return;
   miniTazerBeam(mini);
-  mini.cooldown = 2.2;
+  mini.cooldown = Math.max(0.9, 2.2 - mini.level * 0.035);
 }
 
 function miniTazerBeam(mini) {
@@ -2397,7 +2407,7 @@ function miniTazerBeam(mini) {
     age: 0,
     life: 0.14,
     range: reach,
-    damage: TAZER_MINI_DAMAGE,
+    damage: mini.miniDamage || TAZER_MINI_DAMAGE,
     hp: 9999,
     pierceLeft: 999,
     hitEnemies: new Set(),
@@ -2409,12 +2419,88 @@ function miniTazerBeam(mini) {
   addSpark(mini.x + Math.cos(mini.angle) * 24, mini.y + Math.sin(mini.angle) * 24, "#fff06d", 2);
 }
 
+function enemyTazerChainAttack(enemy, target) {
+  const reach = 330 * Math.min(1.45, enemy.mods.range || 1);
+  const zap = {
+    x: enemy.x + Math.cos(enemy.angle) * 30,
+    y: enemy.y + Math.sin(enemy.angle) * 30,
+    angle: enemy.angle,
+    range: reach,
+    r: 16,
+  };
+  lightning.push({
+    x1: zap.x,
+    y1: zap.y,
+    x2: zap.x + Math.cos(enemy.angle) * reach,
+    y2: zap.y + Math.sin(enemy.angle) * reach,
+    life: 0.1,
+    max: 0.1,
+    color: "#ffe66d",
+    width: 4,
+  });
+
+  let current = null;
+  let firstAlong = Infinity;
+  const candidates = [player, ...enemies.filter((unit) => unit.team === "ally")];
+  candidates.forEach((unit) => {
+    if (unit.hp <= 0) return;
+    const along = distanceAlongBeam(zap, unit);
+    if (along < 0 || along > reach || along >= firstAlong) return;
+    if (distanceToBeam(zap, unit) > unit.r + zap.r) return;
+    current = unit;
+    firstAlong = along;
+  });
+
+  let previous = zap;
+  let damage = Math.max(2, TAZER_CHAIN_DAMAGE * 0.34 * enemy.mods.shellDamage);
+  const hit = new Set();
+  for (let jump = 0; current && jump < TAZER_CHAIN_JUMPS; jump += 1) {
+    const hitKey = current === player ? "player" : current.id;
+    hit.add(hitKey);
+    const dealt = current === player ? playerIncomingDamage(damage) : shielderDamage(current, damage);
+    current.hp -= dealt;
+    current.stun = Math.max(current.stun || 0, 0.28);
+    if (current === player) player.invuln = Math.max(player.invuln || 0, 0.04);
+    markHit(current, dealt, { x: previous.x, y: previous.y, kind: "enemyTazer", noKnockback: true });
+    lightning.push({
+      x1: previous.x,
+      y1: previous.y,
+      x2: current.x,
+      y2: current.y,
+      life: 0.1,
+      max: 0.1,
+      color: "#ffe66d",
+      width: jump === 0 ? 4 : 2.5,
+    });
+    addSpark(current.x, current.y, "#ffe66d", 2);
+    if (current === player && player.hp <= 0) endGame();
+
+    previous = current;
+    damage *= 0.74;
+    let nextTarget = null;
+    let best = TAZER_CHAIN_JUMP_RANGE * TAZER_CHAIN_JUMP_RANGE;
+    candidates.forEach((unit) => {
+      if (unit.hp <= 0) return;
+      const key = unit === player ? "player" : unit.id;
+      if (hit.has(key)) return;
+      const d = distanceSq(current, unit);
+      if (d < best) {
+        best = d;
+        nextTarget = unit;
+      }
+    });
+    current = nextTarget;
+  }
+  if (lightning.length > MAX_LIGHTNING) lightning.splice(0, lightning.length - MAX_LIGHTNING);
+}
+
 function enemyStrategyFor(loadout, boss = false) {
   if (boss) return "boss";
   if (loadout.tankKey === "dragonTamer") return "artillery";
   if (loadout.tankKey === "antiAir") return "artillery";
   if (loadout.tankKey === "flame") return Math.random() < 0.65 ? "ambush" : "rush";
   if (loadout.tankKey === "gamma") return Math.random() < 0.55 ? "orbit" : "kite";
+  if (loadout.tankKey === "tazer") return Math.random() < 0.55 ? "ambush" : "orbit";
   if (loadout.tankKey === "shotgun") return Math.random() < 0.55 ? "flank" : "rush";
   if (loadout.mods.fireworkFragments || loadout.buildName.includes("Siege") || loadout.buildName.includes("Mortar")) return "artillery";
   if (loadout.mods.bulletSpread > 0.55) return "flank";
@@ -2433,6 +2519,7 @@ function strategyRange(enemy) {
   if (enemy.tankKey === "infantry") return enemy.puncher ? 62 : 300;
   if (enemy.strategy === "formation") return 235;
   if (enemy.strategy === "rush" || enemy.strategy === "ambush") return enemy.tankKey === "flame" ? 92 : 135;
+  if (enemy.tankKey === "tazer") return 210;
   if (enemy.tankKey === "shotgun") return 165;
   if (enemy.tankKey === "antiAir") return 520;
   if (enemy.strategy === "artillery") return 430;
@@ -3823,6 +3910,10 @@ function enemyFire(enemy, target = player) {
       r: 7 * enemy.mods.shellSize,
       color: "#ff5959",
     });
+    return;
+  }
+  if (enemy.tankKey === "tazer") {
+    enemyTazerChainAttack(enemy, target);
     return;
   }
   if (enemy.tankKey === "gamma") {
@@ -5460,6 +5551,8 @@ function updateEnemies(dt) {
           ? Math.max(1.75, 3.7 - enemy.level * 0.04) + Math.random() * 0.8
           : enemy.tankKey === "dragonTamer"
             ? Math.max(5.5, 9.5 - enemy.level * 0.08) + Math.random() * 1.4
+          : enemy.tankKey === "tazer"
+            ? Math.max(0.75, 1.55 - enemy.level * 0.025) + Math.random() * 0.35
           : enemy.tankKey === "antiAir"
             ? Math.max(0.85, 1.65 - enemy.level * 0.035) + Math.random() * 0.45
           : enemy.tankKey === "helicopter"
