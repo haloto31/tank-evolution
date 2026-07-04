@@ -70,6 +70,10 @@ const TAZER_CANNON_WAVE_DURATION = 0.9;
 const TAZER_CANNON_WAVE_RADIUS = 520;
 const TAZER_CANNON_WAVE_WIDTH = 56;
 const TAZER_CANNON_WAVE_DAMAGE = 100;
+const TAZER_GUARD_COOLDOWN = 45;
+const TAZER_GUARD_DURATION = 10;
+const TAZER_GUARD_DAMAGE_MULTIPLIER = 0.4;
+const TAZER_GUARD_MAX_HP_MULTIPLIER = 0.5;
 const TAZER_ENERGY_DRAIN = 0.34;
 const TAZER_ENERGY_REGEN = 0.26;
 const RAILGUN_DPS = 95;
@@ -163,6 +167,8 @@ const player = {
   tazerBeamActive: 0,
   tazerMiniCooldown: 0,
   tazerCannonCooldown: 0,
+  tazerGuardCooldown: 0,
+  tazerGuardActive: 0,
   tazerEnergy: 1,
   railEnergy: 1,
   railGiantCooldown: 0,
@@ -1188,6 +1194,8 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
     tazerBeamActive: 0,
     tazerMiniCooldown: 0,
     tazerCannonCooldown: 0,
+    tazerGuardCooldown: 0,
+    tazerGuardActive: 0,
     tazerEnergy: 1,
     railEnergy: 1,
     railGiantCooldown: 0,
@@ -1599,7 +1607,8 @@ function tazerCannonWavePenaltyActive() {
 function playerIncomingDamage(amount) {
   const stormPenalty = tazerStormPenaltyActive() ? 3 : 1;
   const cannonWavePenalty = tazerCannonWavePenaltyActive() ? 5 : 1;
-  return amount * (player.perks.damageTakenMult || 1) * stormPenalty * cannonWavePenalty;
+  const guardPenalty = player.tankKey === "tazer" && (player.tazerGuardActive || 0) > 0 ? TAZER_GUARD_DAMAGE_MULTIPLIER : 1;
+  return amount * (player.perks.damageTakenMult || 1) * stormPenalty * cannonWavePenalty * guardPenalty;
 }
 
 function dragonBurnDamage() {
@@ -2445,6 +2454,24 @@ function updateTazerCannonWaves(dt) {
     });
     if (wave.life <= 0) tazerCannonWaves.splice(i, 1);
   }
+}
+
+function startTazerGuard() {
+  player.tazerGuardCooldown = TAZER_GUARD_COOLDOWN;
+  player.tazerGuardActive = TAZER_GUARD_DURATION;
+  addSpark(player.x, player.y, "#d7fbff", 18);
+  camera.shake = Math.max(camera.shake, 4);
+}
+
+function updateTazerGuard(dt) {
+  player.tazerGuardCooldown = Math.max(0, (player.tazerGuardCooldown || 0) - dt);
+  const wasActive = (player.tazerGuardActive || 0) > 0;
+  player.tazerGuardActive = Math.max(0, (player.tazerGuardActive || 0) - dt);
+  if (player.tankKey !== "tazer" || !wasActive || player.tazerGuardActive > 0) return;
+  player.maxHp = Math.max(1, Math.round(player.maxHp * TAZER_GUARD_MAX_HP_MULTIPLIER));
+  player.hp = Math.min(player.hp, player.maxHp);
+  addSpark(player.x, player.y, "#ff7665", 16);
+  camera.shake = Math.max(camera.shake, 7);
 }
 
 function tazerGiantBeam(dt = 1) {
@@ -3422,6 +3449,9 @@ function firePlayer(dt, target) {
   }
   if (player.tankKey === "tazer" && keys.has("r") && player.tazerCannonCooldown <= 0 && spawnTazerCannonTrap()) {
     player.tazerCannonCooldown = TAZER_CANNON_COOLDOWN;
+  }
+  if (player.tankKey === "tazer" && keys.has("x") && player.tazerGuardCooldown <= 0 && player.tazerGuardActive <= 0) {
+    startTazerGuard();
   }
   if (player.tankKey === "dragonTamer" && keys.has("e") && player.dragonCooldown <= 0) {
     player.dragonCooldown = DRAGON_HORDE_COOLDOWN;
@@ -5329,6 +5359,7 @@ function update(dt) {
   }
   player.angle = angleTo(player, target);
   player.invuln = Math.max(0, player.invuln - dt);
+  updateTazerGuard(dt);
   player.hp = Math.min(player.maxHp, player.hp + regenAmount(player, dt));
 
   let dx = 0;
@@ -5988,6 +6019,7 @@ function draw() {
     if (onScreen(enemy, 170)) drawEnemy(enemy);
   });
   drawTank(player, player.color, player.accent, true);
+  if (player.tankKey === "tazer" && (player.tazerGuardActive || 0) > 0) drawTazerGuard();
   sparks.forEach((spark) => {
     if (onScreen(spark, 80)) drawSpark(spark);
   });
@@ -7400,6 +7432,27 @@ function drawTazerCannonWave(wave) {
   ctx.restore();
 }
 
+function drawTazerGuard() {
+  const activePct = clamp((player.tazerGuardActive || 0) / TAZER_GUARD_DURATION, 0, 1);
+  const pulse = 1 + Math.sin(performance.now() * 0.014) * 0.08;
+  ctx.save();
+  ctx.globalAlpha = 0.3 + activePct * 0.35;
+  const grad = ctx.createRadialGradient(player.x, player.y, player.r, player.x, player.y, player.r + 42 * pulse);
+  grad.addColorStop(0, "rgba(215,251,255,0.05)");
+  grad.addColorStop(0.58, "rgba(215,251,255,0.16)");
+  grad.addColorStop(1, "rgba(255,240,109,0)");
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, player.r + 42 * pulse, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = "#d7fbff";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, player.r + 23 * pulse, 0, TAU);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function onScreen(entity, pad = 140) {
   pad = Number.isFinite(pad) ? pad : 140;
   const halfW = canvas.width / (2 * camera.scale) + pad;
@@ -7412,7 +7465,7 @@ function drawHud() {
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "rgba(11,15,12,0.72)";
-  const panelHeight = player.tankKey === "railgun" ? 196 : player.tankKey === "dragonTamer" ? 226 : player.tankKey === "tazer" ? 286 : player.tankKey === "gamma" ? 166 : 136;
+  const panelHeight = player.tankKey === "railgun" ? 196 : player.tankKey === "dragonTamer" ? 226 : player.tankKey === "tazer" ? 316 : player.tankKey === "gamma" ? 166 : 136;
   roundRect(pad, pad, 360 * camera.scale, panelHeight * camera.scale, 8 * camera.scale);
   ctx.fill();
   ctx.fillStyle = "#f5f4eb";
@@ -7494,7 +7547,16 @@ function drawHud() {
       "#fff06d",
       `R cannon cage ${Math.ceil(player.tazerCannonCooldown || 0)}s`
     );
-    infoY = 262;
+    bar(
+      pad + 16 * camera.scale,
+      pad + 258 * camera.scale,
+      310 * camera.scale,
+      12 * camera.scale,
+      player.tazerGuardActive > 0 ? (player.tazerGuardActive || 0) / TAZER_GUARD_DURATION : 1 - (player.tazerGuardCooldown || 0) / TAZER_GUARD_COOLDOWN,
+      "#d7fbff",
+      player.tazerGuardActive > 0 ? `X guard active ${player.tazerGuardActive.toFixed(1)}s` : `X guard ${Math.ceil(player.tazerGuardCooldown || 0)}s`
+    );
+    infoY = 292;
   } else if (player.tankKey === "dragonTamer") {
     bar(
       pad + 16 * camera.scale,
