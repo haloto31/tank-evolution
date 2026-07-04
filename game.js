@@ -11,6 +11,9 @@ const screens = {
 const tankGrid = document.getElementById("tank-grid");
 const modeButtons = document.querySelectorAll(".mode-card");
 const upgradeGrid = document.getElementById("upgrade-grid");
+const pendingUpgradePanel = document.getElementById("pending-upgrade-panel");
+const pendingUpgradeList = document.getElementById("pending-upgrade-list");
+const pendingUpgradeCount = document.getElementById("pending-upgrade-count");
 const finalStats = document.getElementById("final-stats");
 const resumeButton = document.getElementById("resume-button");
 const restartButton = document.getElementById("restart-button");
@@ -123,6 +126,7 @@ let lastTime = performance.now();
 let spawnCarry = 0;
 let gameState = "start";
 let upgradeChoices = [];
+let pendingUpgradeTokens = 0;
 let nextEnemyId = 1;
 const bossSpawnedLevels = new Set();
 let selectedGameMode = "evolution";
@@ -1255,6 +1259,8 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
   enemyBullets.length = 0;
   flames.length = 0;
   enemies.length = 0;
+  pendingUpgradeTokens = 0;
+  upgradeChoices = [];
   sparks.length = 0;
   lightning.length = 0;
   nukes.length = 0;
@@ -1269,6 +1275,7 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
   bossSpawnedLevels.clear();
   gameState = "playing";
   showOnly();
+  renderPendingUpgrades();
   if (activeGameMode === "infantryArmy") {
     spawnInfantryArmyArrow();
   }
@@ -1313,6 +1320,7 @@ function showOnly(name) {
   Object.entries(screens).forEach(([screenName, element]) => {
     element.classList.toggle("hidden", screenName !== name);
   });
+  renderPendingUpgrades();
 }
 
 function screenToWorld(x, y) {
@@ -4661,11 +4669,11 @@ function gainXp(amount) {
       bossSpawnedLevels.add(player.level);
       spawnBoss(player.level);
     }
-    if (player.lockedTank || !upgradePools[player.tankKey]) break;
-    prepareLevelChoices();
-    gameState = "level";
-    showOnly("level");
-    break;
+    if (!player.lockedTank && upgradePools[player.tankKey]) {
+      pendingUpgradeTokens += 1;
+      if (upgradeChoices.length === 0) prepareLevelChoices();
+      else renderPendingUpgrades();
+    }
   }
 }
 
@@ -4676,14 +4684,9 @@ function xpRewardForEnemy(enemy) {
   return Math.max(1, Math.round(base * (enemy.boss ? 8 : 1) * infantryMult));
 }
 
-function prepareLevelChoices() {
+function createLevelChoices() {
   const pool = upgradePools[player.tankKey];
-  if (!pool || pool.length === 0) {
-    upgradeChoices = [];
-    gameState = "playing";
-    showOnly();
-    return;
-  }
+  if (!pool || pool.length === 0) return [];
   const nextStage = Math.min(MAX_EVOLUTION_STAGE, player.tankStage + 1);
   let candidates = pool.filter(([, , effect]) => (variantStages[effect.variant] || 2) === nextStage);
   if (candidates.length === 0) {
@@ -4697,21 +4700,46 @@ function prepareLevelChoices() {
   const shuffled = [...candidates].sort(() => Math.random() - 0.5);
   if (player.tankKey === "railgun") {
     const multi = candidates.find(([, , effect]) => /Twin|Tri|Quad|Multi|multi/.test(effect.variant));
-    upgradeChoices = multi ? [multi, ...shuffled.filter((choice) => choice !== multi).slice(0, 2)] : shuffled.slice(0, 3);
-  } else {
-    upgradeChoices = shuffled.slice(0, 3);
+    return multi ? [multi, ...shuffled.filter((choice) => choice !== multi).slice(0, 2)] : shuffled.slice(0, 3);
   }
+  return shuffled.slice(0, 3);
+}
+
+function prepareLevelChoices() {
+  upgradeChoices = createLevelChoices();
+  renderPendingUpgrades();
+  return upgradeChoices;
+}
+
+function renderUpgradeButton([name, description, effect], compact = false) {
+  const card = document.createElement("button");
+  card.className = compact ? "side-upgrade-card" : "upgrade-card";
+  card.innerHTML = `
+    <h3>${name} Stage ${variantStages[effect.variant] || "?"}</h3>
+    <p>${description}</p>
+    <div class="stats">${effectText(effect).map((stat) => `<span class="stat">${stat}</span>`).join("")}</div>
+  `;
+  card.addEventListener("click", () => applyUpgrade(name, effect));
+  return card;
+}
+
+function renderPendingUpgrades() {
+  if (!pendingUpgradePanel || !pendingUpgradeList || !pendingUpgradeCount) return;
+  const shouldShow = gameState === "playing" && pendingUpgradeTokens > 0 && !hudHidden;
+  pendingUpgradePanel.classList.toggle("hidden", !shouldShow);
+  if (!shouldShow) return;
+  if (upgradeChoices.length === 0) upgradeChoices = createLevelChoices();
+  if (upgradeChoices.length === 0) {
+    pendingUpgradeTokens = 0;
+    pendingUpgradePanel.classList.add("hidden");
+    return;
+  }
+  pendingUpgradeCount.textContent = String(pendingUpgradeTokens);
+  pendingUpgradeList.innerHTML = "";
   upgradeGrid.innerHTML = "";
-  upgradeChoices.forEach(([name, description, effect]) => {
-    const card = document.createElement("button");
-    card.className = "upgrade-card";
-    card.innerHTML = `
-      <h3>${name} Stage ${variantStages[effect.variant] || "?"}</h3>
-      <p>${description}</p>
-      <div class="stats">${effectText(effect).map((stat) => `<span class="stat">${stat}</span>`).join("")}</div>
-    `;
-    card.addEventListener("click", () => applyUpgrade(name, effect));
-    upgradeGrid.appendChild(card);
+  upgradeChoices.forEach((choice) => {
+    pendingUpgradeList.appendChild(renderUpgradeButton(choice, true));
+    upgradeGrid.appendChild(renderUpgradeButton(choice));
   });
 }
 
@@ -4805,8 +4833,10 @@ function applyUpgrade(name, effect) {
     player.maxHp = 100000;
     player.hp = 100000;
   }
-  gameState = "playing";
-  showOnly();
+  pendingUpgradeTokens = Math.max(0, pendingUpgradeTokens - 1);
+  upgradeChoices = [];
+  if (pendingUpgradeTokens > 0) prepareLevelChoices();
+  else renderPendingUpgrades();
 }
 
 function upgradeFamilyForVariant(variant, currentFamily) {
@@ -7840,6 +7870,7 @@ window.addEventListener("keydown", (event) => {
   if (key === "tab") {
     event.preventDefault();
     hudHidden = !hudHidden;
+    renderPendingUpgrades();
     return;
   }
   keys.add(key);

@@ -104,6 +104,86 @@ button:hover,
   color: #fff9ef;
 }
 
+.side-upgrades {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 4;
+  width: min(330px, calc(100vw - 36px));
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  border: 1px solid rgba(242, 202, 82, 0.45);
+  border-radius: 8px;
+  background: rgba(11, 15, 12, 0.84);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.36);
+  padding: 12px;
+  pointer-events: auto;
+}
+
+.side-upgrades.hidden {
+  display: none;
+}
+
+.side-upgrades-head {
+  align-items: center;
+  color: var(--ink);
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.side-upgrades-head span {
+  align-items: center;
+  background: var(--accent);
+  border-radius: 999px;
+  color: #171915;
+  display: inline-flex;
+  font-weight: 900;
+  height: 28px;
+  justify-content: center;
+  min-width: 28px;
+  padding: 0 8px;
+}
+
+.side-upgrade-list {
+  display: grid;
+  gap: 8px;
+}
+
+.side-upgrade-card {
+  min-height: 0;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.065);
+  color: var(--ink);
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  text-align: left;
+}
+
+.side-upgrade-card h3 {
+  font-size: 0.98rem;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.side-upgrade-card p {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.side-upgrade-card .stats {
+  gap: 5px;
+}
+
+.side-upgrade-card .stat {
+  font-size: 0.66rem;
+  padding: 4px 6px;
+}
+
 .overlay {
   position: absolute;
   inset: 0;
