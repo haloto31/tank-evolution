@@ -126,6 +126,7 @@ const FINAL_BOSS_RELOAD = 5;
 const WAVE_SKIP_PASSWORD = "01028224915";
 const LEADERBOARD_KEY = "tankEvolutionHighestLevels";
 const LEADERBOARD_LIMIT = 5;
+const FIRE_SHIELD_DAMAGE_TAKEN_MULT = 0.4;
 const JUGGERNAUT_DOMAIN_COOLDOWN = 50;
 const JUGGERNAUT_DOMAIN_DURATION = 10;
 const JUGGERNAUT_DOMAIN_RADIUS = 520;
@@ -250,6 +251,7 @@ const player = {
     shellSize: 1,
     fireworkFragments: 0,
     nukeExplosion: false,
+    fireShield: false,
     omniFire: false,
     range: 1,
     flameWidth: 1,
@@ -498,6 +500,7 @@ const familyUpgradeLines = {
   incendiary: [
     ["Cinder Bomber Tank", "A stronger incendiary bomber with hotter afterburn and a heavier shell.", { variant: "incendiary2", color: "#654237", accent: "#ff7b38" }],
     ["Napalm Mortar Tank", "A staged incendiary bomber that coats crowds in longer-lasting fire.", { variant: "incendiary3", color: "#5a382f", accent: "#ff9f45" }],
+    ["Fire Shield Bomber Tank", "A shielded incendiary bomber with 150% damage reduction and nuclear molotov attacks.", { variant: "incendiaryFireShield", color: "#4d2422", accent: "#ffef88" }],
     ["Wildfire Howitzer Tank", "A high-stage bomber with larger burning bursts and stronger fire pellets.", { variant: "incendiary4", color: "#4e332e", accent: "#ffcf5f" }],
     ["Apex Incendiary Bomber Tank", "A final incendiary form built around brutal burning explosions.", { variant: "incendiary5", color: "#3d2a28", accent: "#ff4d2e" }],
   ],
@@ -578,6 +581,7 @@ const variantAliases = {
   firework5: "defaultFirework",
   incendiary2: "defaultIncendiary",
   incendiary3: "defaultIncendiary",
+  incendiaryFireShield: "defaultIncendiary",
   incendiary4: "defaultIncendiary",
   incendiary5: "defaultIncendiary",
   railgun2: "railgunBase",
@@ -666,6 +670,7 @@ const variantStages = {
   defaultIncendiary: 1,
   incendiary2: 2,
   incendiary3: 3,
+  incendiaryFireShield: 3,
   incendiary4: 4,
   incendiary5: 5,
   railgunLance: 2,
@@ -1871,7 +1876,8 @@ function playerIncomingDamage(amount) {
   const guardPenalty = player.tankKey === "tazer" && (player.tazerGuardActive || 0) > 0 ? TAZER_GUARD_DAMAGE_MULTIPLIER : 1;
   const dominanceDefense = juggernautPlayerBuffActive() ? 1 / JUGGERNAUT_DOMAIN_PLAYER_BUFF : 1;
   const resolveDefense = juggernautResolveActive() ? JUGGERNAUT_RESOLVE_DAMAGE_TAKEN_MULT : 1;
-  return amount * (player.perks.damageTakenMult || 1) * stormPenalty * cannonWavePenalty * guardPenalty * dominanceDefense * resolveDefense;
+  const fireShieldDefense = player.mods?.fireShield ? FIRE_SHIELD_DAMAGE_TAKEN_MULT : 1;
+  return amount * (player.perks.damageTakenMult || 1) * stormPenalty * cannonWavePenalty * guardPenalty * dominanceDefense * resolveDefense * fireShieldDefense;
 }
 
 function dragonBurnDamage() {
@@ -5162,6 +5168,13 @@ function effectText(effect) {
       `${loadout.mods.fireworkFragments} mini-nukes`,
     ];
   }
+  if (loadout.mods.fireShield) {
+    return [
+      "Fire shield",
+      "150% damage reduction",
+      "Nuclear attacks",
+    ];
+  }
   if (loadout.mods.afterburnDps) {
     return [
       `${(DEFAULT_BULLET_DAMAGE * loadout.mods.shellDamage).toFixed(1)} bomb damage`,
@@ -5319,6 +5332,7 @@ function stackUpgradeMods(previous, next) {
   });
   stacked.nukeExplosion = Boolean(previous.nukeExplosion || next.nukeExplosion);
   stacked.omniFire = Boolean(previous.omniFire || next.omniFire);
+  stacked.fireShield = Boolean(previous.fireShield || next.fireShield);
   return stacked;
 }
 
@@ -5596,6 +5610,16 @@ function createVariantLoadout(variant, level = player.level) {
     mods.bulletSpeed = 0.68 + tier * 0.03;
     mods.range = 1.6 + tier * 0.07;
     speed = 182 + tier;
+    if (originalVariant === "incendiaryFireShield") {
+      mods.fireShield = true;
+      mods.nukeExplosion = true;
+      mods.shellDamage *= 1.18;
+      mods.shellSize *= 1.15;
+      mods.fireworkFragments = Math.max(mods.fireworkFragments, 18 + Math.floor(tier * 0.8));
+      mods.afterburnDps *= 1.2;
+      mods.fireRate *= 0.82;
+      speed -= 8;
+    }
   } else if (variant === "defaultQuad") {
     mods.bulletCount = 4 + Math.floor(tier / 3);
     mods.bulletSpread = 0.14 + tier * 0.015;
@@ -6709,6 +6733,7 @@ function draw() {
     if (onScreen(enemy, 170)) drawEnemy(enemy);
   });
   drawTank(player, player.color, player.accent, true);
+  if (player.mods?.fireShield) drawFireShield();
   if (juggernautResolveActive()) drawJuggernautResolve();
   if (player.tankKey === "tazer" && (player.tazerGuardActive || 0) > 0) drawTazerGuard();
   sparks.forEach((spark) => {
@@ -8202,6 +8227,35 @@ function drawJuggernautResolve() {
   ctx.lineWidth = 5;
   ctx.beginPath();
   ctx.arc(player.x, player.y, player.r + 20 * pulse, 0, TAU);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawFireShield() {
+  const t = performance.now() * 0.006;
+  const pulse = 1 + Math.sin(t * 1.7) * 0.08;
+  const radius = player.r + 28 * pulse;
+  ctx.save();
+  const grad = ctx.createRadialGradient(player.x, player.y, player.r * 0.7, player.x, player.y, radius + 20);
+  grad.addColorStop(0, "rgba(255,239,136,0.04)");
+  grad.addColorStop(0.55, "rgba(255,123,56,0.22)");
+  grad.addColorStop(1, "rgba(255,50,28,0)");
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, radius + 20, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = "#ffef88";
+  ctx.lineWidth = 3;
+  ctx.globalAlpha = 0.78;
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, radius, 0, TAU);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(255,107,74,0.72)";
+  ctx.lineWidth = 5;
+  ctx.setLineDash([9, 8]);
+  ctx.lineDashOffset = -t * 10;
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, radius + 9, 0, TAU);
   ctx.stroke();
   ctx.restore();
 }
