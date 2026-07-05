@@ -19,6 +19,7 @@ const waveSkipPassword = document.getElementById("wave-skip-password");
 const waveSkipStatus = document.getElementById("wave-skip-status");
 const finalStats = document.getElementById("final-stats");
 const resumeButton = document.getElementById("resume-button");
+const endGameButton = document.getElementById("end-game-button");
 const restartButton = document.getElementById("restart-button");
 const moveStick = document.getElementById("move-stick");
 const moveStickKnob = moveStick?.querySelector("span");
@@ -6590,6 +6591,12 @@ function endGame() {
   showOnly("gameOver");
 }
 
+function endGameFromPause() {
+  gameState = "gameOver";
+  finalStats.textContent = `Ended run - Level ${player.level} - ${player.kills} enemies destroyed - ${player.buildName}`;
+  showOnly("gameOver");
+}
+
 function winGame(reason = "level21Boss") {
   gameState = "gameOver";
   finalStats.textContent =
@@ -8482,6 +8489,7 @@ resumeButton.addEventListener("click", () => {
   gameState = "playing";
   showOnly();
 });
+endGameButton.addEventListener("click", endGameFromPause);
 restartButton.addEventListener("click", () => {
   gameState = "start";
   showOnly("start");
