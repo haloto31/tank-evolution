@@ -1365,7 +1365,7 @@ function hasPasswordAccess() {
 }
 
 function starterNeedsPassword(tank) {
-  return tank.key === "tazer" || tank.key === "dragonTamer" || tank.key === "startJuggernaut" || tank.key === "startUltra" || tank.familyKey === "juggernaut" || tank.variant === "defaultJuggernaut" || tank.variant === "defaultUltra";
+  return tank.key === "tazer" || tank.key === "dragonTamer" || tank.key === "startIncendiary" || tank.key === "startJuggernaut" || tank.key === "startUltra" || tank.familyKey === "juggernaut" || tank.variant === "defaultJuggernaut" || tank.variant === "defaultUltra";
 }
 
 function applyWaveSkip(wave) {
@@ -1635,7 +1635,7 @@ function chooseTankCard(tank) {
   `;
   button.addEventListener("click", () => {
     if (starterNeedsPassword(tank) && !hasPasswordAccess()) {
-      if (waveSkipStatus) waveSkipStatus.textContent = "Password needed for Tazer, Dragon Tamer, Juggernaut, and Ultra.";
+      if (waveSkipStatus) waveSkipStatus.textContent = "Password needed for Tazer, Dragon Tamer, Incendiary, Juggernaut, and Ultra.";
       return;
     }
     resetGame(tank.key, selectedGameMode);
@@ -5646,7 +5646,7 @@ function createVariantLoadout(variant, level = player.level) {
   } else if (variant === "defaultIncendiary") {
     mods.bulletCount = 1;
     mods.bulletSpread = 0;
-    mods.shellDamage = 1.25 + tier * 0.08;
+    mods.shellDamage = (1.25 + tier * 0.08) * 0.5;
     mods.shellSize = 1.38;
     mods.fireworkFragments = 13 + Math.floor(tier * 0.65);
     mods.afterburnDps = 25 + tier * 1.7;
