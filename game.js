@@ -130,6 +130,11 @@ const JUGGERNAUT_JUDGMENT_COOLDOWN = 20;
 const JUGGERNAUT_JUDGMENT_DURATION = 6;
 const JUGGERNAUT_JUDGMENT_SLOW = 0.5;
 const JUGGERNAUT_JUDGMENT_VULNERABLE = 1.5;
+const JUGGERNAUT_RESOLVE_COOLDOWN = 40;
+const JUGGERNAUT_RESOLVE_DURATION = 10;
+const JUGGERNAUT_RESOLVE_HP_MULT = 1.4;
+const JUGGERNAUT_RESOLVE_DAMAGE_BUFF = 1.2;
+const JUGGERNAUT_RESOLVE_DAMAGE_TAKEN_MULT = 0.5;
 const MAX_EVOLUTION_STAGE = 30;
 const MAX_SPARKS = 24;
 const MAX_LIGHTNING = 24;
@@ -208,6 +213,9 @@ const player = {
   juggernautDomain: null,
   juggernautJudgmentCooldown: 0,
   juggernautJudgmentArmed: false,
+  juggernautResolveCooldown: 0,
+  juggernautResolveActive: 0,
+  juggernautResolveHpBonus: 0,
   tazerCooldown: 0,
   tazerBeamCooldown: 0,
   tazerBeamActive: 0,
@@ -1335,6 +1343,9 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
     juggernautDomain: null,
     juggernautJudgmentCooldown: 0,
     juggernautJudgmentArmed: false,
+    juggernautResolveCooldown: 0,
+    juggernautResolveActive: 0,
+    juggernautResolveHpBonus: 0,
     tazerCooldown: 0,
     tazerBeamCooldown: 0,
     tazerBeamActive: 0,
@@ -1769,7 +1780,8 @@ function regenAmount(tank, dt) {
 
 function playerDamage(amount, target = null) {
   const bossMult = target?.boss ? player.perks.bossDamageMult || 1 : 1;
-  return amount * (player.perks.damageMult || 1) * bossMult;
+  const resolveDamage = juggernautResolveActive() ? JUGGERNAUT_RESOLVE_DAMAGE_BUFF : 1;
+  return amount * (player.perks.damageMult || 1) * bossMult * resolveDamage;
 }
 
 function enemyAttackDamage(enemy, amount) {
@@ -1790,7 +1802,8 @@ function playerIncomingDamage(amount) {
   const cannonWavePenalty = tazerCannonWavePenaltyActive() ? 5 : 1;
   const guardPenalty = player.tankKey === "tazer" && (player.tazerGuardActive || 0) > 0 ? TAZER_GUARD_DAMAGE_MULTIPLIER : 1;
   const dominanceDefense = juggernautPlayerBuffActive() ? 1 / JUGGERNAUT_DOMAIN_PLAYER_BUFF : 1;
-  return amount * (player.perks.damageTakenMult || 1) * stormPenalty * cannonWavePenalty * guardPenalty * dominanceDefense;
+  const resolveDefense = juggernautResolveActive() ? JUGGERNAUT_RESOLVE_DAMAGE_TAKEN_MULT : 1;
+  return amount * (player.perks.damageTakenMult || 1) * stormPenalty * cannonWavePenalty * guardPenalty * dominanceDefense * resolveDefense;
 }
 
 function dragonBurnDamage() {
@@ -1830,11 +1843,35 @@ function juggernautPlayerBuffActive() {
   return Boolean(activeJuggernautDomain());
 }
 
+function juggernautResolveActive() {
+  return player.tankKey === "juggernaut" && (player.juggernautResolveActive || 0) > 0;
+}
+
 function applyJuggernautJudgment(enemy) {
   if (!enemy || enemy.team === "ally") return;
   enemy.juggernautJudgment = Math.max(enemy.juggernautJudgment || 0, JUGGERNAUT_JUDGMENT_DURATION);
   enemy.juggernautJudgmentPulse = 0.35;
   addSpark(enemy.x, enemy.y, "#f0d37a", 8);
+}
+
+function startJuggernautResolve() {
+  player.juggernautResolveCooldown = JUGGERNAUT_RESOLVE_COOLDOWN;
+  player.juggernautResolveActive = JUGGERNAUT_RESOLVE_DURATION;
+  const baseMaxHp = Math.max(1, player.maxHp - (player.juggernautResolveHpBonus || 0));
+  player.juggernautResolveHpBonus = Math.max(1, Math.round(baseMaxHp * (JUGGERNAUT_RESOLVE_HP_MULT - 1)));
+  player.maxHp = baseMaxHp + player.juggernautResolveHpBonus;
+  player.hp = Math.min(player.maxHp, player.hp + player.juggernautResolveHpBonus);
+  addSpark(player.x, player.y, "#ffe58a", 22);
+  camera.shake = Math.max(camera.shake, 5);
+}
+
+function endJuggernautResolve() {
+  const bonus = player.juggernautResolveHpBonus || 0;
+  if (bonus > 0) {
+    player.maxHp = Math.max(1, player.maxHp - bonus);
+    player.hp = Math.min(player.hp, player.maxHp);
+    player.juggernautResolveHpBonus = 0;
+  }
 }
 
 function startJuggernautDomain() {
@@ -1857,6 +1894,13 @@ function startJuggernautDomain() {
 function updateJuggernautDomain(dt) {
   player.juggernautDomainCooldown = Math.max(0, (player.juggernautDomainCooldown || 0) - dt);
   player.juggernautJudgmentCooldown = Math.max(0, (player.juggernautJudgmentCooldown || 0) - dt);
+  player.juggernautResolveCooldown = Math.max(0, (player.juggernautResolveCooldown || 0) - dt);
+  if (player.tankKey !== "juggernaut" && (player.juggernautResolveHpBonus || 0) > 0) {
+    endJuggernautResolve();
+  }
+  const resolveWasActive = (player.juggernautResolveActive || 0) > 0;
+  player.juggernautResolveActive = Math.max(0, (player.juggernautResolveActive || 0) - dt);
+  if (resolveWasActive && player.juggernautResolveActive <= 0) endJuggernautResolve();
   const domain = player.juggernautDomain;
   if (!domain) return;
   domain.life -= dt;
@@ -3854,6 +3898,9 @@ function firePlayer(dt, target) {
     player.juggernautJudgmentCooldown = JUGGERNAUT_JUDGMENT_COOLDOWN;
     addSpark(player.x + Math.cos(player.angle) * 42, player.y + Math.sin(player.angle) * 42, "#f0d37a", 8);
   }
+  if (player.tankKey === "juggernaut" && keys.has("x") && player.juggernautResolveCooldown <= 0 && !juggernautResolveActive()) {
+    startJuggernautResolve();
+  }
   if (player.tankKey === "railgun" && keys.has("e") && player.railGiantCooldown <= 0 && !player.railGiantArmed) {
     player.railGiantArmed = true;
     player.railGiantCooldown = RAILGUN_GIANT_COOLDOWN;
@@ -4933,9 +4980,12 @@ function gainXp(amount) {
     const oldMaxHp = player.maxHp;
     const penaltyMult = player.maxHpPenaltyMult || 1;
     const guardActive = player.tankKey === "tazer" && (player.tazerGuardActive || 0) > 0;
-    const newBaseMaxHp = player.lockedTank ? Math.max(1, player.maxHp - (player.tazerGuardHpBonus || 0)) : Math.max(1, Math.round(scaledTankMaxHp(player.level) * (player.perks.maxHpMult || 1) * penaltyMult));
+    const resolveActive = player.tankKey === "juggernaut" && (player.juggernautResolveActive || 0) > 0;
+    const temporaryHpBonus = (player.tazerGuardHpBonus || 0) + (player.juggernautResolveHpBonus || 0);
+    const newBaseMaxHp = player.lockedTank ? Math.max(1, player.maxHp - temporaryHpBonus) : Math.max(1, Math.round(scaledTankMaxHp(player.level) * (player.perks.maxHpMult || 1) * penaltyMult));
     player.tazerGuardHpBonus = guardActive ? Math.max(0, Math.round(newBaseMaxHp * (TAZER_GUARD_TEMP_HP_MULTIPLIER - 1))) : 0;
-    player.maxHp = newBaseMaxHp + player.tazerGuardHpBonus;
+    player.juggernautResolveHpBonus = resolveActive ? Math.max(1, Math.round(newBaseMaxHp * (JUGGERNAUT_RESOLVE_HP_MULT - 1))) : 0;
+    player.maxHp = newBaseMaxHp + player.tazerGuardHpBonus + player.juggernautResolveHpBonus;
     player.hp = Math.min(player.maxHp, player.hp + 20 + Math.max(0, player.maxHp - oldMaxHp));
     if (activeGameMode !== "infantryArmy" && (player.lockedTank || isBossLevel(player.level)) && !bossSpawnedLevels.has(player.level)) {
       bossSpawnedLevels.add(player.level);
@@ -6585,6 +6635,7 @@ function draw() {
     if (onScreen(enemy, 170)) drawEnemy(enemy);
   });
   drawTank(player, player.color, player.accent, true);
+  if (juggernautResolveActive()) drawJuggernautResolve();
   if (player.tankKey === "tazer" && (player.tazerGuardActive || 0) > 0) drawTazerGuard();
   sparks.forEach((spark) => {
     if (onScreen(spark, 80)) drawSpark(spark);
@@ -8059,6 +8110,28 @@ function drawJuggernautDomain() {
   ctx.restore();
 }
 
+function drawJuggernautResolve() {
+  const activePct = clamp((player.juggernautResolveActive || 0) / JUGGERNAUT_RESOLVE_DURATION, 0, 1);
+  const pulse = 1 + Math.sin(performance.now() * 0.011) * 0.06;
+  ctx.save();
+  ctx.globalAlpha = 0.35 + activePct * 0.35;
+  const radius = player.r + 36 * pulse;
+  const grad = ctx.createRadialGradient(player.x, player.y, player.r, player.x, player.y, radius);
+  grad.addColorStop(0, "rgba(255,229,138,0.08)");
+  grad.addColorStop(0.6, "rgba(240,211,122,0.22)");
+  grad.addColorStop(1, "rgba(255,159,95,0)");
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, radius, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = "#ffe58a";
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, player.r + 20 * pulse, 0, TAU);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawTazerGuard() {
   const activePct = clamp((player.tazerGuardActive || 0) / TAZER_GUARD_DURATION, 0, 1);
   const pulse = 1 + Math.sin(performance.now() * 0.014) * 0.08;
@@ -8100,7 +8173,7 @@ function drawHud() {
         : player.tankKey === "tazer"
           ? 346
           : player.tankKey === "juggernaut"
-            ? 196
+            ? 226
             : player.tankKey === "gamma"
             ? 166
             : 136;
@@ -8159,7 +8232,16 @@ function drawHud() {
       "#ffe58a",
       player.juggernautJudgmentArmed ? "Q judgment armed" : `Q judgment ${Math.ceil(player.juggernautJudgmentCooldown || 0)}s`
     );
-    infoY = 172;
+    bar(
+      pad + 16 * camera.scale,
+      pad + 168 * camera.scale,
+      310 * camera.scale,
+      12 * camera.scale,
+      juggernautResolveActive() ? (player.juggernautResolveActive || 0) / JUGGERNAUT_RESOLVE_DURATION : 1 - (player.juggernautResolveCooldown || 0) / JUGGERNAUT_RESOLVE_COOLDOWN,
+      "#ffe58a",
+      juggernautResolveActive() ? `X resolve active ${player.juggernautResolveActive.toFixed(1)}s` : `X resolve ${Math.ceil(player.juggernautResolveCooldown || 0)}s`
+    );
+    infoY = 202;
   } else if (player.tankKey === "tazer") {
     bar(
       pad + 16 * camera.scale,
