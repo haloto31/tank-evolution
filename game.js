@@ -121,6 +121,11 @@ const VICTORY_BOSS_LEVEL = 21;
 const FINAL_BOSS_DAMAGE_MULTIPLIER = 1 / 3;
 const FINAL_BOSS_RELOAD = 5;
 const WAVE_SKIP_PASSWORD = "01028224915";
+const JUGGERNAUT_DOMAIN_COOLDOWN = 35;
+const JUGGERNAUT_DOMAIN_DURATION = 10;
+const JUGGERNAUT_DOMAIN_RADIUS = 520;
+const JUGGERNAUT_DOMAIN_PLAYER_BUFF = 1.5;
+const JUGGERNAUT_DOMAIN_ENEMY_MULT = 0.7;
 const MAX_EVOLUTION_STAGE = 30;
 const MAX_SPARKS = 24;
 const MAX_LIGHTNING = 24;
@@ -195,6 +200,8 @@ const player = {
   adultDragonCooldown: 0,
   blackDragonCooldown: 0,
   gammaStormCooldown: 0,
+  juggernautDomainCooldown: 0,
+  juggernautDomain: null,
   tazerCooldown: 0,
   tazerBeamCooldown: 0,
   tazerBeamActive: 0,
@@ -1288,6 +1295,8 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
     adultDragonCooldown: 0,
     blackDragonCooldown: 0,
     gammaStormCooldown: 0,
+    juggernautDomainCooldown: 0,
+    juggernautDomain: null,
     tazerCooldown: 0,
     tazerBeamCooldown: 0,
     tazerBeamActive: 0,
@@ -1726,7 +1735,8 @@ function playerDamage(amount, target = null) {
 }
 
 function enemyAttackDamage(enemy, amount) {
-  return amount * (enemy?.damageMult || 1);
+  const domainMult = inJuggernautDomain(enemy) ? JUGGERNAUT_DOMAIN_ENEMY_MULT : 1;
+  return amount * (enemy?.damageMult || 1) * domainMult;
 }
 
 function tazerStormPenaltyActive() {
@@ -1741,17 +1751,82 @@ function playerIncomingDamage(amount) {
   const stormPenalty = tazerStormPenaltyActive() ? 3 : 1;
   const cannonWavePenalty = tazerCannonWavePenaltyActive() ? 5 : 1;
   const guardPenalty = player.tankKey === "tazer" && (player.tazerGuardActive || 0) > 0 ? TAZER_GUARD_DAMAGE_MULTIPLIER : 1;
-  return amount * (player.perks.damageTakenMult || 1) * stormPenalty * cannonWavePenalty * guardPenalty;
+  const dominanceDefense = juggernautPlayerBuffActive() ? 1 / JUGGERNAUT_DOMAIN_PLAYER_BUFF : 1;
+  return amount * (player.perks.damageTakenMult || 1) * stormPenalty * cannonWavePenalty * guardPenalty * dominanceDefense;
 }
 
 function dragonBurnDamage() {
   return 5 + player.level * 0.18;
 }
 
+function activeJuggernautDomain() {
+  return player.tankKey === "juggernaut" && player.juggernautDomain && player.juggernautDomain.life > 0 ? player.juggernautDomain : null;
+}
+
+function inJuggernautDomain(entity) {
+  const domain = activeJuggernautDomain();
+  return Boolean(domain && Math.hypot(entity.x - domain.x, entity.y - domain.y) <= domain.r);
+}
+
+function clampToJuggernautDomain(enemy) {
+  const domain = activeJuggernautDomain();
+  if (!domain || enemy.team === "ally" || enemy.babyDragon || enemy.adultDragon || enemy.blackDragon) return;
+  if (enemy.domainPrisoner === undefined) {
+    enemy.domainPrisoner = Math.hypot(enemy.x - domain.x, enemy.y - domain.y) <= domain.r;
+  }
+  const dx = enemy.x - domain.x;
+  const dy = enemy.y - domain.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const boundary = Math.max(20, domain.r - enemy.r - 2);
+  if (enemy.domainPrisoner && dist > boundary) {
+    enemy.x = domain.x + (dx / dist) * boundary;
+    enemy.y = domain.y + (dy / dist) * boundary;
+  } else if (!enemy.domainPrisoner && dist < domain.r + enemy.r + 2) {
+    const outside = domain.r + enemy.r + 3;
+    enemy.x = domain.x + (dx / dist) * outside;
+    enemy.y = domain.y + (dy / dist) * outside;
+  }
+}
+
+function juggernautPlayerBuffActive() {
+  return Boolean(activeJuggernautDomain());
+}
+
+function startJuggernautDomain() {
+  const viewRadius = Math.max(canvas.width, canvas.height) / (2 * camera.scale);
+  player.juggernautDomain = {
+    x: player.x,
+    y: player.y,
+    r: Math.max(JUGGERNAUT_DOMAIN_RADIUS, viewRadius * 0.82),
+    life: JUGGERNAUT_DOMAIN_DURATION,
+    max: JUGGERNAUT_DOMAIN_DURATION,
+  };
+  player.juggernautDomainCooldown = JUGGERNAUT_DOMAIN_COOLDOWN;
+  enemies.forEach((enemy) => {
+    enemy.domainPrisoner = Math.hypot(enemy.x - player.juggernautDomain.x, enemy.y - player.juggernautDomain.y) <= player.juggernautDomain.r;
+  });
+  addSpark(player.x, player.y, "#f0d37a", 24);
+  camera.shake = Math.max(camera.shake, 7);
+}
+
+function updateJuggernautDomain(dt) {
+  player.juggernautDomainCooldown = Math.max(0, (player.juggernautDomainCooldown || 0) - dt);
+  const domain = player.juggernautDomain;
+  if (!domain) return;
+  domain.life -= dt;
+  if (domain.life <= 0 || player.tankKey !== "juggernaut") {
+    player.juggernautDomain = null;
+    enemies.forEach((enemy) => {
+      delete enemy.domainPrisoner;
+    });
+  }
+}
+
 function enemyIncomingDamage(enemy, amount) {
-  if (!enemy?.shielderTrooper) return amount;
-  triggerShielderThorns(enemy, amount);
-  return amount * 0.2;
+  let finalAmount = inJuggernautDomain(enemy) ? amount * JUGGERNAUT_DOMAIN_PLAYER_BUFF : amount;
+  if (!enemy?.shielderTrooper) return finalAmount;
+  triggerShielderThorns(enemy, finalAmount);
+  return finalAmount * 0.2;
 }
 
 function shielderDamage(target, amount) {
@@ -3154,8 +3229,10 @@ function moveStrategicEnemy(enemy, target, dt) {
     vy += avoid.y * 1.45;
     const len = Math.hypot(vx, vy);
     if (len > 0.02) {
-      enemy.x = clamp(enemy.x + (vx / len) * enemy.speed * dt, 32, world.w - 32);
-      enemy.y = clamp(enemy.y + (vy / len) * enemy.speed * dt, 32, world.h - 32);
+      const domainSlow = inJuggernautDomain(enemy) ? JUGGERNAUT_DOMAIN_ENEMY_MULT : 1;
+      enemy.x = clamp(enemy.x + (vx / len) * enemy.speed * domainSlow * dt, 32, world.w - 32);
+      enemy.y = clamp(enemy.y + (vy / len) * enemy.speed * domainSlow * dt, 32, world.h - 32);
+      clampToJuggernautDomain(enemy);
     }
     return;
   }
@@ -3190,8 +3267,10 @@ function moveStrategicEnemy(enemy, target, dt) {
   const len = Math.hypot(vx, vy);
   if (len > 0.02) {
     const speedMult = hpPct < 0.32 ? 1.12 : enemy.strategy === "flank" ? 1.08 : 1;
-    enemy.x = clamp(enemy.x + (vx / len) * enemy.speed * speedMult * dt, 32, world.w - 32);
-    enemy.y = clamp(enemy.y + (vy / len) * enemy.speed * speedMult * dt, 32, world.h - 32);
+    const domainSlow = inJuggernautDomain(enemy) ? JUGGERNAUT_DOMAIN_ENEMY_MULT : 1;
+    enemy.x = clamp(enemy.x + (vx / len) * enemy.speed * speedMult * domainSlow * dt, 32, world.w - 32);
+    enemy.y = clamp(enemy.y + (vy / len) * enemy.speed * speedMult * domainSlow * dt, 32, world.h - 32);
+    clampToJuggernautDomain(enemy);
   }
 }
 
@@ -3718,6 +3797,9 @@ function firePlayer(dt, target) {
     player.gammaStormCooldown = GAMMA_STORM_COOLDOWN;
     callGammaLightningStorm();
   }
+  if (player.tankKey === "juggernaut" && keys.has("e") && player.juggernautDomainCooldown <= 0 && !activeJuggernautDomain()) {
+    startJuggernautDomain();
+  }
   if (player.tankKey === "railgun" && keys.has("e") && player.railGiantCooldown <= 0 && !player.railGiantArmed) {
     player.railGiantArmed = true;
     player.railGiantCooldown = RAILGUN_GIANT_COOLDOWN;
@@ -3866,7 +3948,7 @@ function firePlayer(dt, target) {
   const interval =
     player.tankKey === "gamma" ? (0.62 * 1.5) / (player.mods.fireRate * GAMMA_FIRE_RATE_MULTIPLIER) + 2 : 0.38 / player.mods.fireRate;
   if (!firing || player.cooldown > 0) return;
-  player.cooldown = interval;
+  player.cooldown = player.tankKey === "juggernaut" && juggernautPlayerBuffActive() ? interval / JUGGERNAUT_DOMAIN_PLAYER_BUFF : interval;
 
   if (player.tankKey === "gamma") {
     const arcs = Math.min(GAMMA_MAX_PELLETS, (2 + player.mods.gammaArcs) * 3);
@@ -5714,6 +5796,7 @@ function update(dt) {
   }
   player.angle = angleTo(player, target);
   player.invuln = Math.max(0, player.invuln - dt);
+  updateJuggernautDomain(dt);
   updateTazerGuard(dt);
   player.hp = Math.min(player.maxHp, player.hp + regenAmount(player, dt));
   refreshEntityCounts();
@@ -5729,8 +5812,9 @@ function update(dt) {
   const len = Math.hypot(dx, dy) || 1;
   if ((player.stun || 0) <= 0) {
     const stormSpeedMult = tazerStormPenaltyActive() ? 0.5 : 1;
-    player.x = clamp(player.x + (dx / len) * player.speed * stormSpeedMult * dt, 32, world.w - 32);
-    player.y = clamp(player.y + (dy / len) * player.speed * stormSpeedMult * dt, 32, world.h - 32);
+    const juggernautSpeedMult = juggernautPlayerBuffActive() ? JUGGERNAUT_DOMAIN_PLAYER_BUFF : 1;
+    player.x = clamp(player.x + (dx / len) * player.speed * stormSpeedMult * juggernautSpeedMult * dt, 32, world.w - 32);
+    player.y = clamp(player.y + (dy / len) * player.speed * stormSpeedMult * juggernautSpeedMult * dt, 32, world.h - 32);
   }
 
   if (activeGameMode === "infantryArmy") {
@@ -6138,6 +6222,7 @@ function updateEnemies(dt) {
     } else if (enemyTarget) {
       enemy.angle = angleTo(enemy, enemyTarget);
       moveStrategicEnemy(enemy, enemyTarget, dt);
+      clampToJuggernautDomain(enemy);
       if (activeGameMode === "infantryArmy" && enemy.team !== "ally" && enemy.infantry) enemy.angle = angleTo(enemy, player);
       enemy.cooldown -= dt;
     } else {
@@ -6366,6 +6451,7 @@ function draw() {
   }
   ctx.translate(-camera.x, -camera.y);
   drawWorld();
+  if (activeJuggernautDomain()) drawJuggernautDomain();
   flames.forEach((flame) => {
     if (onScreen(flame, flame.reach + 80)) drawFlame(flame);
   });
@@ -7825,6 +7911,39 @@ function drawTazerCannonWave(wave) {
   ctx.restore();
 }
 
+function drawJuggernautDomain() {
+  const domain = activeJuggernautDomain();
+  if (!domain) return;
+  const activePct = clamp(domain.life / domain.max, 0, 1);
+  const pulse = 1 + Math.sin(performance.now() * 0.006) * 0.025;
+  ctx.save();
+  const grad = ctx.createRadialGradient(domain.x, domain.y, 40, domain.x, domain.y, domain.r * pulse);
+  grad.addColorStop(0, `rgba(240,211,122,${0.08 * activePct})`);
+  grad.addColorStop(0.72, `rgba(255,159,95,${0.06 * activePct})`);
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(domain.x, domain.y, domain.r * pulse, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = `rgba(240,211,122,${0.52 + activePct * 0.35})`;
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.arc(domain.x, domain.y, domain.r * pulse, 0, TAU);
+  ctx.stroke();
+  ctx.strokeStyle = `rgba(255,255,255,${0.18 + activePct * 0.18})`;
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 24; i += 1) {
+    const angle = (i / 24) * TAU + performance.now() * 0.0003;
+    const inner = domain.r * 0.82;
+    const outer = domain.r * pulse;
+    ctx.beginPath();
+    ctx.moveTo(domain.x + Math.cos(angle) * inner, domain.y + Math.sin(angle) * inner);
+    ctx.lineTo(domain.x + Math.cos(angle) * outer, domain.y + Math.sin(angle) * outer);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawTazerGuard() {
   const activePct = clamp((player.tazerGuardActive || 0) / TAZER_GUARD_DURATION, 0, 1);
   const pulse = 1 + Math.sin(performance.now() * 0.014) * 0.08;
@@ -7858,7 +7977,16 @@ function drawHud() {
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = "rgba(11,15,12,0.72)";
-  const panelHeight = player.tankKey === "railgun" ? 196 : player.tankKey === "dragonTamer" ? 226 : player.tankKey === "tazer" ? 346 : player.tankKey === "gamma" ? 166 : 136;
+  const panelHeight =
+    player.tankKey === "railgun"
+      ? 196
+      : player.tankKey === "dragonTamer"
+        ? 226
+        : player.tankKey === "tazer"
+          ? 346
+          : player.tankKey === "gamma" || player.tankKey === "juggernaut"
+            ? 166
+            : 136;
   roundRect(pad, pad, 360 * camera.scale, panelHeight * camera.scale, 8 * camera.scale);
   ctx.fill();
   ctx.fillStyle = "#f5f4eb";
@@ -7892,6 +8020,18 @@ function drawHud() {
       1 - (player.gammaStormCooldown || 0) / GAMMA_STORM_COOLDOWN,
       GAMMA_BLUE,
       `E lightning storm ${Math.ceil(player.gammaStormCooldown || 0)}s`
+    );
+    infoY = 142;
+  } else if (player.tankKey === "juggernaut") {
+    const domain = activeJuggernautDomain();
+    bar(
+      pad + 16 * camera.scale,
+      pad + 108 * camera.scale,
+      310 * camera.scale,
+      12 * camera.scale,
+      domain ? domain.life / domain.max : 1 - (player.juggernautDomainCooldown || 0) / JUGGERNAUT_DOMAIN_COOLDOWN,
+      "#f0d37a",
+      domain ? `E dominance active ${domain.life.toFixed(1)}s` : `E dominance ${Math.ceil(player.juggernautDomainCooldown || 0)}s`
     );
     infoY = 142;
   } else if (player.tankKey === "tazer") {
