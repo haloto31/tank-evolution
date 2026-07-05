@@ -1035,8 +1035,8 @@ starters.push(
     name: "Incendiary Bomber Tank",
     color: "#5f4036",
     accent: "#ff7b38",
-    description: "A slow bomber tank that lobs molotov bottles which shatter into fire and heavy afterburn.",
-    stats: ["Molotov lob", "Fire splash", "Afterburn"],
+    description: "A slow bomber tank that lobs molotov bottles and can trigger a nuclear fire shield with Q.",
+    stats: ["Molotov lob", "Q fire shield", "Afterburn"],
   },
   {
     key: "startVampire",
@@ -1468,6 +1468,7 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
           pelletCount: 1,
         },
   });
+  if (starter.key === "startIncendiary") player.mods.fireShieldAbility = true;
   bullets.length = 0;
   enemyBullets.length = 0;
   flames.length = 0;
@@ -5118,8 +5119,11 @@ function xpRewardForEnemy(enemy) {
 }
 
 function createLevelChoices() {
-  const pool = upgradePools[player.tankKey];
+  let pool = upgradePools[player.tankKey];
   if (!pool || pool.length === 0) return [];
+  if (player.tankKey === "incendiary" && player.mods?.fireShieldAbility) {
+    pool = pool.filter(([, , effect]) => effect.variant !== "incendiaryFireShield");
+  }
   const nextStage = Math.min(MAX_EVOLUTION_STAGE, player.tankStage + 1);
   let candidates = pool.filter(([, , effect]) => (variantStages[effect.variant] || 2) === nextStage);
   if (candidates.length === 0) {
@@ -5131,6 +5135,10 @@ function createLevelChoices() {
   }
   if (candidates.length === 0) candidates = pool.filter(([, , effect]) => (variantStages[effect.variant] || 2) === player.tankStage);
   const shuffled = [...candidates].sort(() => Math.random() - 0.5);
+  if (player.tankKey === "incendiary" && !player.mods?.fireShieldAbility) {
+    const fireShield = pool.find(([, , effect]) => effect.variant === "incendiaryFireShield");
+    return fireShield ? [fireShield, ...shuffled.filter((choice) => choice !== fireShield).slice(0, 2)] : shuffled.slice(0, 3);
+  }
   if (player.tankKey === "railgun") {
     const multi = candidates.find(([, , effect]) => /Twin|Tri|Quad|Multi|multi/.test(effect.variant));
     return multi ? [multi, ...shuffled.filter((choice) => choice !== multi).slice(0, 2)] : shuffled.slice(0, 3);
