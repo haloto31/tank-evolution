@@ -127,6 +127,8 @@ const WAVE_SKIP_PASSWORD = "01028224915";
 const LEADERBOARD_KEY = "tankEvolutionHighestLevels";
 const LEADERBOARD_LIMIT = 5;
 const FIRE_SHIELD_DAMAGE_TAKEN_MULT = 0.4;
+const FIRE_SHIELD_DURATION = 30;
+const FIRE_SHIELD_COOLDOWN = 45;
 const JUGGERNAUT_DOMAIN_COOLDOWN = 50;
 const JUGGERNAUT_DOMAIN_DURATION = 10;
 const JUGGERNAUT_DOMAIN_RADIUS = 520;
@@ -218,6 +220,8 @@ const player = {
   adultDragonCooldown: 0,
   blackDragonCooldown: 0,
   gammaStormCooldown: 0,
+  fireShieldCooldown: 0,
+  fireShieldActive: 0,
   juggernautDomainCooldown: 0,
   juggernautDomain: null,
   juggernautJudgmentCooldown: 0,
@@ -251,7 +255,7 @@ const player = {
     shellSize: 1,
     fireworkFragments: 0,
     nukeExplosion: false,
-    fireShield: false,
+    fireShieldAbility: false,
     omniFire: false,
     range: 1,
     flameWidth: 1,
@@ -1040,9 +1044,9 @@ starters.push(
     name: "Vampire Tank",
     color: "#5f283a",
     accent: "#ff6f9f",
-    description: "A basic cannon tank that repairs itself whenever it destroys enemies.",
-    stats: ["Perk: Heal on kill", "7.5 damage shells", "Sustain"],
-    perks: { killHeal: 15 },
+    description: "A basic cannon tank that heals from the damage it deals.",
+    stats: ["Perk: Lifesteal", "15% damage heal", "Sustain"],
+    perks: { lifeSteal: 0.15 },
   },
   {
     key: "startJuggernaut",
@@ -1241,8 +1245,10 @@ const enemyFamilies = {
 };
 
 function enemyStarterOptions() {
+  const bannedEnemyStarters = new Set(["startScholar", "startBossHunter", "startCommander"]);
   return starters.filter(
     (starter) =>
+      !bannedEnemyStarters.has(starter.key) &&
       starter.key !== "default" &&
       starter.key !== "flame" &&
       starter.key !== "gamma" &&
@@ -1409,6 +1415,8 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
     adultDragonCooldown: 0,
     blackDragonCooldown: 0,
     gammaStormCooldown: 0,
+    fireShieldCooldown: 0,
+    fireShieldActive: 0,
     juggernautDomainCooldown: 0,
     juggernautDomain: null,
     juggernautJudgmentCooldown: 0,
@@ -1876,8 +1884,19 @@ function playerIncomingDamage(amount) {
   const guardPenalty = player.tankKey === "tazer" && (player.tazerGuardActive || 0) > 0 ? TAZER_GUARD_DAMAGE_MULTIPLIER : 1;
   const dominanceDefense = juggernautPlayerBuffActive() ? 1 / JUGGERNAUT_DOMAIN_PLAYER_BUFF : 1;
   const resolveDefense = juggernautResolveActive() ? JUGGERNAUT_RESOLVE_DAMAGE_TAKEN_MULT : 1;
-  const fireShieldDefense = player.mods?.fireShield ? FIRE_SHIELD_DAMAGE_TAKEN_MULT : 1;
+  const fireShieldDefense = fireShieldActive() ? FIRE_SHIELD_DAMAGE_TAKEN_MULT : 1;
   return amount * (player.perks.damageTakenMult || 1) * stormPenalty * cannonWavePenalty * guardPenalty * dominanceDefense * resolveDefense * fireShieldDefense;
+}
+
+function fireShieldActive() {
+  return player.tankKey === "incendiary" && player.mods?.fireShieldAbility && (player.fireShieldActive || 0) > 0;
+}
+
+function startFireShield() {
+  player.fireShieldCooldown = FIRE_SHIELD_COOLDOWN;
+  player.fireShieldActive = FIRE_SHIELD_DURATION;
+  addSpark(player.x, player.y, "#ffef88", 24);
+  camera.shake = Math.max(camera.shake, 5);
 }
 
 function dragonBurnDamage() {
@@ -1989,9 +2008,22 @@ function updateJuggernautDomain(dt) {
 function enemyIncomingDamage(enemy, amount) {
   let finalAmount = inJuggernautDomain(enemy) ? amount * JUGGERNAUT_DOMAIN_PLAYER_BUFF : amount;
   if (juggernautResolveActive() && enemy?.team === "enemy") finalAmount *= 1 / JUGGERNAUT_RESOLVE_ENEMY_HP_MULT;
-  if (!enemy?.shielderTrooper) return finalAmount;
+  if (!enemy?.shielderTrooper) {
+    applyPlayerLifesteal(enemy, finalAmount);
+    return finalAmount;
+  }
   triggerShielderThorns(enemy, finalAmount);
-  return finalAmount * 0.2;
+  const shieldedDamage = finalAmount * 0.2;
+  applyPlayerLifesteal(enemy, shieldedDamage);
+  return shieldedDamage;
+}
+
+function applyPlayerLifesteal(enemy, damage) {
+  const lifeSteal = player.perks.lifeSteal || 0;
+  if (!lifeSteal || enemy?.team === "ally" || damage <= 0 || player.hp <= 0) return;
+  const actualDamage = Math.max(0, Math.min(enemy?.hp ?? damage, damage));
+  if (actualDamage <= 0) return;
+  player.hp = Math.min(player.maxHp, player.hp + actualDamage * lifeSteal);
 }
 
 function shielderDamage(target, amount) {
@@ -3942,6 +3974,8 @@ function firePlayer(dt, target) {
   player.adultDragonCooldown = Math.max(0, (player.adultDragonCooldown || 0) - dt);
   player.blackDragonCooldown = Math.max(0, (player.blackDragonCooldown || 0) - dt);
   player.gammaStormCooldown = Math.max(0, (player.gammaStormCooldown || 0) - dt);
+  player.fireShieldCooldown = Math.max(0, (player.fireShieldCooldown || 0) - dt);
+  player.fireShieldActive = Math.max(0, (player.fireShieldActive || 0) - dt);
   player.tazerCooldown = Math.max(0, (player.tazerCooldown || 0) - dt);
   player.tazerBeamCooldown = Math.max(0, (player.tazerBeamCooldown || 0) - dt);
   const tazerBeamWasActive = (player.tazerBeamActive || 0) > 0;
@@ -3963,6 +3997,9 @@ function firePlayer(dt, target) {
   if (player.tankKey === "gamma" && keys.has("e") && player.gammaStormCooldown <= 0) {
     player.gammaStormCooldown = GAMMA_STORM_COOLDOWN;
     callGammaLightningStorm();
+  }
+  if (player.tankKey === "incendiary" && player.mods?.fireShieldAbility && keys.has("q") && player.fireShieldCooldown <= 0 && !fireShieldActive()) {
+    startFireShield();
   }
   if (player.tankKey === "juggernaut" && keys.has("e") && player.juggernautDomainCooldown <= 0 && !activeJuggernautDomain()) {
     startJuggernautDomain();
@@ -4207,7 +4244,7 @@ function firePlayer(dt, target) {
       pierceLeft: playerPierce(),
       hitEnemies: new Set(),
       fireworkFragments: player.mods.fireworkFragments || 0,
-      nukeExplosion: player.mods.nukeExplosion || false,
+      nukeExplosion: player.mods.nukeExplosion || fireShieldActive(),
       afterburnDps: player.mods.afterburnDps || 0,
       afterburnTime: player.mods.afterburnTime || 0,
       juggernautJudgment: player.tankKey === "juggernaut" && player.juggernautJudgmentArmed,
@@ -5168,11 +5205,11 @@ function effectText(effect) {
       `${loadout.mods.fireworkFragments} mini-nukes`,
     ];
   }
-  if (loadout.mods.fireShield) {
+  if (loadout.mods.fireShieldAbility) {
     return [
-      "Fire shield",
-      "150% damage reduction",
-      "Nuclear attacks",
+      "Q fire shield",
+      "30 sec defense",
+      "Nuclear while active",
     ];
   }
   if (loadout.mods.afterburnDps) {
@@ -5332,7 +5369,7 @@ function stackUpgradeMods(previous, next) {
   });
   stacked.nukeExplosion = Boolean(previous.nukeExplosion || next.nukeExplosion);
   stacked.omniFire = Boolean(previous.omniFire || next.omniFire);
-  stacked.fireShield = Boolean(previous.fireShield || next.fireShield);
+  stacked.fireShieldAbility = Boolean(previous.fireShieldAbility || next.fireShieldAbility);
   return stacked;
 }
 
@@ -5611,8 +5648,7 @@ function createVariantLoadout(variant, level = player.level) {
     mods.range = 1.6 + tier * 0.07;
     speed = 182 + tier;
     if (originalVariant === "incendiaryFireShield") {
-      mods.fireShield = true;
-      mods.nukeExplosion = true;
+      mods.fireShieldAbility = true;
       mods.shellDamage *= 1.18;
       mods.shellSize *= 1.15;
       mods.fireworkFragments = Math.max(mods.fireworkFragments, 18 + Math.floor(tier * 0.8));
@@ -6532,7 +6568,6 @@ function updateEnemies(dt) {
       enemies.splice(i, 1);
       if (enemy.team !== "ally") {
         player.kills += enemy.boss ? 10 : 1;
-        if (player.perks.killHeal) player.hp = Math.min(player.maxHp, player.hp + player.perks.killHeal);
         if (defeatedVictoryBoss) addSpark(player.x, player.y, "#ffef88", 28);
         gainXp(xpRewardForEnemy(enemy));
       }
@@ -6733,7 +6768,7 @@ function draw() {
     if (onScreen(enemy, 170)) drawEnemy(enemy);
   });
   drawTank(player, player.color, player.accent, true);
-  if (player.mods?.fireShield) drawFireShield();
+  if (fireShieldActive()) drawFireShield();
   if (juggernautResolveActive()) drawJuggernautResolve();
   if (player.tankKey === "tazer" && (player.tazerGuardActive || 0) > 0) drawTazerGuard();
   sparks.forEach((spark) => {
@@ -8302,6 +8337,8 @@ function drawHud() {
           ? 346
           : player.tankKey === "juggernaut"
             ? 226
+            : player.tankKey === "incendiary" && player.mods?.fireShieldAbility
+            ? 166
             : player.tankKey === "gamma"
             ? 166
             : 136;
@@ -8338,6 +8375,17 @@ function drawHud() {
       1 - (player.gammaStormCooldown || 0) / GAMMA_STORM_COOLDOWN,
       GAMMA_BLUE,
       `E lightning storm ${Math.ceil(player.gammaStormCooldown || 0)}s`
+    );
+    infoY = 142;
+  } else if (player.tankKey === "incendiary" && player.mods?.fireShieldAbility) {
+    bar(
+      pad + 16 * camera.scale,
+      pad + 108 * camera.scale,
+      310 * camera.scale,
+      12 * camera.scale,
+      fireShieldActive() ? (player.fireShieldActive || 0) / FIRE_SHIELD_DURATION : 1 - (player.fireShieldCooldown || 0) / FIRE_SHIELD_COOLDOWN,
+      "#ffef88",
+      fireShieldActive() ? `Q fire shield ${player.fireShieldActive.toFixed(1)}s` : `Q fire shield ${Math.ceil(player.fireShieldCooldown || 0)}s`
     );
     infoY = 142;
   } else if (player.tankKey === "juggernaut") {
