@@ -967,6 +967,16 @@ starters.push(
     stats: ["One shell", "Impact burst", "Firework pellets"],
   },
   {
+    key: "startIncendiary",
+    familyKey: "firework",
+    variant: "defaultIncendiary",
+    name: "Incendiary Bomber Tank",
+    color: "#5f4036",
+    accent: "#ff7b38",
+    description: "A slow bomber tank that lobs burning shells which burst and leave heavy afterburn.",
+    stats: ["Burning bomb", "Impact burst", "Afterburn"],
+  },
+  {
     key: "startVampire",
     familyKey: "default",
     name: "Vampire Tank",
@@ -1585,6 +1595,9 @@ function starterWeaponSvg(name, family, mods, accent) {
   if (family === "shotgun") {
     return [-18, -9, 0, 9, 18].map((angle) => `<rect x="12" y="-5" width="54" height="10" rx="5" fill="${accent}" transform="rotate(${angle})"/>`).join("");
   }
+  if (name.includes("Incendiary") || mods.afterburnDps) {
+    return `<rect x="8" y="-15" width="60" height="30" rx="11" fill="${accent}"/><circle cx="76" cy="0" r="12" fill="#ff3d1f"/><path d="M84 -13 C104 -2 102 10 86 18 C92 6 78 3 84 -13 Z" fill="#ffd36d"/>`;
+  }
   if (mods.fireworkFragments) {
     return `<rect x="14" y="-12" width="58" height="24" rx="9" fill="${accent}"/><circle cx="78" cy="0" r="9" fill="#ffcf5f"/>`;
   }
@@ -1611,6 +1624,7 @@ function starterSkinSvg(name, accent) {
   if (name.includes("Shotgun") || name.includes("Buckshot") || name.includes("Slugstorm") || name.includes("Sweeper")) return `<path d="M-32 -20 H26 L38 0 L26 20 H-32 Z" fill="rgba(255,159,90,0.38)"/><circle cx="-10" cy="0" r="7" fill="#ff9f5a"/><circle cx="10" cy="-8" r="5" fill="#ffd36d"/><circle cx="12" cy="10" r="5" fill="#ffd36d"/>`;
   if (name.includes("Vampire")) return `<circle cx="-10" cy="0" r="6" fill="#ff6f9f"/><circle cx="10" cy="0" r="6" fill="#ff6f9f"/><path d="M-6 14 L0 22 L6 14" fill="none" stroke="#5f001c" stroke-width="3"/>`;
   if (name.includes("Juggernaut")) return `<rect x="-48" y="-22" width="7" height="44" fill="#f0d37a"/><rect x="41" y="-22" width="7" height="44" fill="#f0d37a"/><rect x="-22" y="-34" width="44" height="7" fill="#f0d37a"/>`;
+  if (name.includes("Incendiary")) return `<path d="M-34 -20 H24 L38 0 L24 20 H-34 Z" fill="rgba(255,123,56,0.4)"/><circle cx="-16" cy="-8" r="5" fill="#ffcf5f"/><circle cx="4" cy="10" r="6" fill="#ff7b38"/><path d="M18 -22 C32 -10 30 8 14 18 C21 4 10 -2 18 -22 Z" fill="#ff3d1f"/>`;
   if (name.includes("Sprinter")) return `<path d="M-42 -25 L-70 -40 L-36 -6 Z M-42 25 L-70 40 L-36 6 Z" fill="#55d6ff"/>`;
   if (name.includes("Scholar")) return `<rect x="-18" y="-24" width="36" height="7" fill="#c5ff6f"/><rect x="-18" y="17" width="36" height="7" fill="#c5ff6f"/><rect x="-12" y="-14" width="24" height="28" fill="#d7d3ec"/>`;
   if (name.includes("Piercer")) return `<path d="M-28 -22 L28 22 M-28 22 L28 -22" stroke="#8cffb2" stroke-width="4"/>`;
@@ -3937,8 +3951,10 @@ function firePlayer(dt, target) {
       hitEnemies: new Set(),
       fireworkFragments: player.mods.fireworkFragments || 0,
       nukeExplosion: player.mods.nukeExplosion || false,
+      afterburnDps: player.mods.afterburnDps || 0,
+      afterburnTime: player.mods.afterburnTime || 0,
       r: 5 * player.mods.shellSize,
-      color: "#f7e58b",
+      color: player.mods.afterburnDps ? "#ff8d45" : "#f7e58b",
     });
   }
   if (bullets.length > MAX_PLAYER_BULLETS) bullets.splice(0, bullets.length - MAX_PLAYER_BULLETS);
@@ -4589,7 +4605,9 @@ function enemyFire(enemy, target = player) {
           : Math.max(1, enemy.mods.shellDamage),
       r: 5 * enemy.mods.shellSize,
       fireworkFragments: enemy.mods.fireworkFragments || 0,
-      color: enemy.team === "ally" ? "#9df29e" : "#ece6cc",
+      afterburnDps: enemy.mods.afterburnDps || 0,
+      afterburnTime: enemy.mods.afterburnTime || 0,
+      color: enemy.mods.afterburnDps ? "#ff8d45" : enemy.team === "ally" ? "#9df29e" : "#ece6cc",
     });
   }
 }
@@ -4646,7 +4664,7 @@ function explodeFireworkBullet(b, ownerTeam = "player", ignoredEnemyId = null) {
   if (!b.fireworkFragments) return;
   const count = b.fireworkFragments;
   const damage = Math.max(0.5, b.damage * 0.28);
-  addSpark(b.x, b.y, "#ffcf5f", 12);
+  addSpark(b.x, b.y, b.afterburnDps ? "#ff7b38" : "#ffcf5f", 12);
   for (let i = 0; i < count; i += 1) {
     const a = (i / count) * TAU + Math.random() * 0.14;
     const speed = 210 + Math.random() * 95;
@@ -4663,7 +4681,9 @@ function explodeFireworkBullet(b, ownerTeam = "player", ignoredEnemyId = null) {
       r: Math.max(2.5, b.r * 0.45),
       nukeExplosion: Boolean(b.nukeExplosion),
       miniNuke: Boolean(b.nukeExplosion),
-      color: ownerTeam === "enemy" ? "#ffcf5f" : "#ffe58a",
+      afterburnDps: b.afterburnDps ? b.afterburnDps * 0.45 : 0,
+      afterburnTime: b.afterburnTime ? b.afterburnTime * 0.65 : 0,
+      color: b.afterburnDps ? "#ff8d45" : ownerTeam === "enemy" ? "#ffcf5f" : "#ffe58a",
     };
     if (ownerTeam === "enemy") {
       enemyBullets.push(pellet);
@@ -4873,6 +4893,13 @@ function effectText(effect) {
       `${loadout.mods.fireworkFragments} mini-nukes`,
     ];
   }
+  if (loadout.mods.afterburnDps) {
+    return [
+      `${(DEFAULT_BULLET_DAMAGE * loadout.mods.shellDamage).toFixed(1)} bomb damage`,
+      `${loadout.mods.fireworkFragments} fire burst`,
+      `${loadout.mods.afterburnDps.toFixed(1)} burn DPS`,
+    ];
+  }
   if (effect.variant.toLowerCase().includes("helicopter") || effectFamily === "helicopterBase") {
     return [
       `${loadout.mods.bulletCount} miniguns`,
@@ -4969,6 +4996,8 @@ function stackUpgradeMods(previous, next) {
     shellDamage: 1,
     shellSize: 1,
     fireworkFragments: 0,
+    afterburnDps: 0,
+    afterburnTime: 0,
     range: 1,
     flameWidth: 1,
     burnTime: 1,
@@ -4986,6 +5015,8 @@ function stackUpgradeMods(previous, next) {
     shellDamage: 24,
     shellSize: 4,
     fireworkFragments: 70,
+    afterburnDps: 90,
+    afterburnTime: 8,
     range: 5.5,
     flameWidth: 3.4,
     burnTime: 6,
@@ -5272,6 +5303,18 @@ function createVariantLoadout(variant, level = player.level) {
     mods.bulletSpeed = 0.95 + tier * 0.04;
     mods.range = 1.55 + tier * 0.08;
     speed = 192 + tier * 2;
+  } else if (variant === "defaultIncendiary") {
+    mods.bulletCount = 1;
+    mods.bulletSpread = 0;
+    mods.shellDamage = 1.75 + tier * 0.12;
+    mods.shellSize = 1.7;
+    mods.fireworkFragments = 8 + Math.floor(tier / 2);
+    mods.afterburnDps = 18 + tier * 1.25;
+    mods.afterburnTime = 3.4 + tier * 0.12;
+    mods.fireRate = 0.52 + tier * 0.035;
+    mods.bulletSpeed = 0.78 + tier * 0.035;
+    mods.range = 1.78 + tier * 0.08;
+    speed = 176 + tier;
   } else if (variant === "defaultQuad") {
     mods.bulletCount = 4 + Math.floor(tier / 3);
     mods.bulletSpread = 0.14 + tier * 0.015;
