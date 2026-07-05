@@ -1292,7 +1292,7 @@ function hasPasswordAccess() {
 }
 
 function starterNeedsPassword(tank) {
-  return tank.key === "tazer" || tank.key === "dragonTamer" || tank.key === "startUltra" || tank.variant === "defaultUltra";
+  return tank.key === "tazer" || tank.key === "dragonTamer" || tank.key === "juggernaut" || tank.key === "startUltra" || tank.variant === "defaultUltra";
 }
 
 function applyWaveSkip(wave) {
@@ -1558,7 +1558,7 @@ function chooseTankCard(tank) {
   `;
   button.addEventListener("click", () => {
     if (starterNeedsPassword(tank) && !hasPasswordAccess()) {
-      if (waveSkipStatus) waveSkipStatus.textContent = "Password needed for Tazer, Dragon Tamer, and Ultra.";
+      if (waveSkipStatus) waveSkipStatus.textContent = "Password needed for Tazer, Dragon Tamer, Juggernaut, and Ultra.";
       return;
     }
     resetGame(tank.key, selectedGameMode);
