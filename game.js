@@ -121,11 +121,15 @@ const VICTORY_BOSS_LEVEL = 21;
 const FINAL_BOSS_DAMAGE_MULTIPLIER = 1 / 3;
 const FINAL_BOSS_RELOAD = 5;
 const WAVE_SKIP_PASSWORD = "01028224915";
-const JUGGERNAUT_DOMAIN_COOLDOWN = 35;
+const JUGGERNAUT_DOMAIN_COOLDOWN = 50;
 const JUGGERNAUT_DOMAIN_DURATION = 10;
 const JUGGERNAUT_DOMAIN_RADIUS = 520;
 const JUGGERNAUT_DOMAIN_PLAYER_BUFF = 1.5;
 const JUGGERNAUT_DOMAIN_ENEMY_MULT = 0.7;
+const JUGGERNAUT_JUDGMENT_COOLDOWN = 20;
+const JUGGERNAUT_JUDGMENT_DURATION = 6;
+const JUGGERNAUT_JUDGMENT_SLOW = 0.5;
+const JUGGERNAUT_JUDGMENT_VULNERABLE = 1.5;
 const MAX_EVOLUTION_STAGE = 30;
 const MAX_SPARKS = 24;
 const MAX_LIGHTNING = 24;
@@ -202,6 +206,8 @@ const player = {
   gammaStormCooldown: 0,
   juggernautDomainCooldown: 0,
   juggernautDomain: null,
+  juggernautJudgmentCooldown: 0,
+  juggernautJudgmentArmed: false,
   tazerCooldown: 0,
   tazerBeamCooldown: 0,
   tazerBeamActive: 0,
@@ -473,6 +479,12 @@ const familyUpgradeLines = {
     ["Nova Firework Tank", "A high-stage firework cannon with heavy impact damage and more fragments.", { variant: "firework4", color: "#cec6ef", accent: "#ff8fd8" }],
     ["Supernova Firework Tank", "A final firework form built around one huge exploding shell.", { variant: "firework5", color: "#e5daf4", accent: "#ffcf5f" }],
   ],
+  incendiary: [
+    ["Cinder Bomber Tank", "A stronger incendiary bomber with hotter afterburn and a heavier shell.", { variant: "incendiary2", color: "#654237", accent: "#ff7b38" }],
+    ["Napalm Mortar Tank", "A staged incendiary bomber that coats crowds in longer-lasting fire.", { variant: "incendiary3", color: "#5a382f", accent: "#ff9f45" }],
+    ["Wildfire Howitzer Tank", "A high-stage bomber with larger burning bursts and stronger fire pellets.", { variant: "incendiary4", color: "#4e332e", accent: "#ffcf5f" }],
+    ["Apex Incendiary Bomber Tank", "A final incendiary form built around brutal burning explosions.", { variant: "incendiary5", color: "#3d2a28", accent: "#ff4d2e" }],
+  ],
   railgun: [
     ["Rail Lance Tank", "A sharper railgun stage with more reach and beam damage.", { variant: "railgun2", color: "#dfe6ef", accent: "#88f7ff" }],
     ["Volt Rail Tank", "A faster railgun stage that reloads sooner but stays fragile.", { variant: "railgun3", color: "#d9eff0", accent: "#a8ffde" }],
@@ -548,6 +560,10 @@ const variantAliases = {
   firework3: "defaultFirework",
   firework4: "defaultFirework",
   firework5: "defaultFirework",
+  incendiary2: "defaultIncendiary",
+  incendiary3: "defaultIncendiary",
+  incendiary4: "defaultIncendiary",
+  incendiary5: "defaultIncendiary",
   railgun2: "railgunBase",
   railgun3: "railgunVolt",
   railgun4: "railgunSiege",
@@ -631,6 +647,11 @@ const variantStages = {
   firework3: 3,
   firework4: 4,
   firework5: 5,
+  defaultIncendiary: 1,
+  incendiary2: 2,
+  incendiary3: 3,
+  incendiary4: 4,
+  incendiary5: 5,
   railgunLance: 2,
   railgunVolt: 2,
   railgunSiege: 2,
@@ -759,6 +780,11 @@ const familyStageForms = {
     { key: "nova", title: "Nova", base: "defaultFirework", accent: "#ff8fd8", color: "#cec6ef", focus: "larger fragment explosions" },
     { key: "cracker", title: "Cracker", base: "defaultScatter", accent: "#ffd96d", color: "#d6cceb", focus: "smaller fireworks spread across crowds" },
   ],
+  incendiary: [
+    { key: "cinder", title: "Cinder", base: "defaultIncendiary", accent: "#ff7b38", color: "#654237", focus: "hotter afterburn and burning shell bursts" },
+    { key: "napalm", title: "Napalm", base: "defaultIncendiary", accent: "#ff9f45", color: "#5a382f", focus: "longer-lasting fire patches after impact" },
+    { key: "wildfire", title: "Wildfire", base: "defaultIncendiary", accent: "#ffcf5f", color: "#4e332e", focus: "larger fire pellet explosions" },
+  ],
   railgun: [
     { key: "lance", title: "Lance", base: "railgunLance", accent: "#88f7ff", color: "#dfe6ef", focus: "a long thin all-piercing beam" },
     { key: "volt", title: "Volt", base: "railgunVolt", accent: "#a8ffde", color: "#d9eff0", focus: "faster beam reloads on a fragile frame" },
@@ -827,6 +853,7 @@ addEvolutionStages("siege", "Siege", "defaultBulwark", "#ffd36d");
 addEvolutionStages("needle", "Needle", "defaultNeedle", "#9dffff");
 addEvolutionStages("auto", "Auto", "defaultCyclone", "#8dff98");
 addEvolutionStages("firework", "Firework", "defaultFirework", "#ffcf5f");
+addEvolutionStages("incendiary", "Incendiary", "defaultIncendiary", "#ff7b38");
 addEvolutionStages("railgun", "Railgun", "railgunLance", "#88f7ff");
 addEvolutionStages("shotgun", "Shotgun", "shotgunBuck", "#ff9f5a");
 addEvolutionStages("tazer", "Tazer", "tazerCoil", "#ffe66d");
@@ -845,6 +872,7 @@ const familyLabels = {
   needle: "Needle",
   auto: "Auto",
   firework: "Firework",
+  incendiary: "Incendiary",
   railgun: "Railgun",
   shotgun: "Shotgun",
   tazer: "Tazer",
@@ -862,6 +890,7 @@ const branchFamilies = {
   defaultNeedle: "needle",
   defaultAuto: "auto",
   defaultFirework: "firework",
+  defaultIncendiary: "incendiary",
   defaultQuad: "triCannon",
   defaultScatter: "fanfire",
   defaultBreaker: "siege",
@@ -873,6 +902,7 @@ const branchFamilies = {
   needle2: "needle",
   auto2: "auto",
   firework2: "firework",
+  incendiary2: "incendiary",
   juggernaut2: "juggernaut",
 };
 
@@ -975,13 +1005,13 @@ starters.push(
   },
   {
     key: "startIncendiary",
-    familyKey: "firework",
+    familyKey: "incendiary",
     variant: "defaultIncendiary",
     name: "Incendiary Bomber Tank",
     color: "#5f4036",
     accent: "#ff7b38",
-    description: "A slow bomber tank that lobs burning shells which burst and leave heavy afterburn.",
-    stats: ["Burning bomb", "Impact burst", "Afterburn"],
+    description: "A slow bomber tank that lobs molotov bottles which shatter into fire and heavy afterburn.",
+    stats: ["Molotov lob", "Fire splash", "Afterburn"],
   },
   {
     key: "startVampire",
@@ -1138,6 +1168,12 @@ const enemyFamilies = {
     color: "#8a879e",
     accent: "#ffcf5f",
     variants: upgradePools.firework,
+  },
+  incendiary: {
+    baseName: "Incendiary Bomber Tank",
+    color: "#5f4036",
+    accent: "#ff7b38",
+    variants: upgradePools.incendiary,
   },
   flame: {
     baseName: "Flamethrower Tank",
@@ -1297,6 +1333,8 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
     gammaStormCooldown: 0,
     juggernautDomainCooldown: 0,
     juggernautDomain: null,
+    juggernautJudgmentCooldown: 0,
+    juggernautJudgmentArmed: false,
     tazerCooldown: 0,
     tazerBeamCooldown: 0,
     tazerBeamActive: 0,
@@ -1792,6 +1830,13 @@ function juggernautPlayerBuffActive() {
   return Boolean(activeJuggernautDomain());
 }
 
+function applyJuggernautJudgment(enemy) {
+  if (!enemy || enemy.team === "ally") return;
+  enemy.juggernautJudgment = Math.max(enemy.juggernautJudgment || 0, JUGGERNAUT_JUDGMENT_DURATION);
+  enemy.juggernautJudgmentPulse = 0.35;
+  addSpark(enemy.x, enemy.y, "#f0d37a", 8);
+}
+
 function startJuggernautDomain() {
   const viewRadius = Math.max(canvas.width, canvas.height) / (2 * camera.scale);
   player.juggernautDomain = {
@@ -1811,6 +1856,7 @@ function startJuggernautDomain() {
 
 function updateJuggernautDomain(dt) {
   player.juggernautDomainCooldown = Math.max(0, (player.juggernautDomainCooldown || 0) - dt);
+  player.juggernautJudgmentCooldown = Math.max(0, (player.juggernautJudgmentCooldown || 0) - dt);
   const domain = player.juggernautDomain;
   if (!domain) return;
   domain.life -= dt;
@@ -1824,6 +1870,7 @@ function updateJuggernautDomain(dt) {
 
 function enemyIncomingDamage(enemy, amount) {
   let finalAmount = inJuggernautDomain(enemy) ? amount * JUGGERNAUT_DOMAIN_PLAYER_BUFF : amount;
+  if ((enemy?.juggernautJudgment || 0) > 0) finalAmount *= JUGGERNAUT_JUDGMENT_VULNERABLE;
   if (!enemy?.shielderTrooper) return finalAmount;
   triggerShielderThorns(enemy, finalAmount);
   return finalAmount * 0.2;
@@ -3230,8 +3277,9 @@ function moveStrategicEnemy(enemy, target, dt) {
     const len = Math.hypot(vx, vy);
     if (len > 0.02) {
       const domainSlow = inJuggernautDomain(enemy) ? JUGGERNAUT_DOMAIN_ENEMY_MULT : 1;
-      enemy.x = clamp(enemy.x + (vx / len) * enemy.speed * domainSlow * dt, 32, world.w - 32);
-      enemy.y = clamp(enemy.y + (vy / len) * enemy.speed * domainSlow * dt, 32, world.h - 32);
+      const judgmentSlow = (enemy.juggernautJudgment || 0) > 0 ? JUGGERNAUT_JUDGMENT_SLOW : 1;
+      enemy.x = clamp(enemy.x + (vx / len) * enemy.speed * domainSlow * judgmentSlow * dt, 32, world.w - 32);
+      enemy.y = clamp(enemy.y + (vy / len) * enemy.speed * domainSlow * judgmentSlow * dt, 32, world.h - 32);
       clampToJuggernautDomain(enemy);
     }
     return;
@@ -3268,8 +3316,9 @@ function moveStrategicEnemy(enemy, target, dt) {
   if (len > 0.02) {
     const speedMult = hpPct < 0.32 ? 1.12 : enemy.strategy === "flank" ? 1.08 : 1;
     const domainSlow = inJuggernautDomain(enemy) ? JUGGERNAUT_DOMAIN_ENEMY_MULT : 1;
-    enemy.x = clamp(enemy.x + (vx / len) * enemy.speed * speedMult * domainSlow * dt, 32, world.w - 32);
-    enemy.y = clamp(enemy.y + (vy / len) * enemy.speed * speedMult * domainSlow * dt, 32, world.h - 32);
+    const judgmentSlow = (enemy.juggernautJudgment || 0) > 0 ? JUGGERNAUT_JUDGMENT_SLOW : 1;
+    enemy.x = clamp(enemy.x + (vx / len) * enemy.speed * speedMult * domainSlow * judgmentSlow * dt, 32, world.w - 32);
+    enemy.y = clamp(enemy.y + (vy / len) * enemy.speed * speedMult * domainSlow * judgmentSlow * dt, 32, world.h - 32);
     clampToJuggernautDomain(enemy);
   }
 }
@@ -3800,6 +3849,11 @@ function firePlayer(dt, target) {
   if (player.tankKey === "juggernaut" && keys.has("e") && player.juggernautDomainCooldown <= 0 && !activeJuggernautDomain()) {
     startJuggernautDomain();
   }
+  if (player.tankKey === "juggernaut" && keys.has("q") && player.juggernautJudgmentCooldown <= 0 && !player.juggernautJudgmentArmed) {
+    player.juggernautJudgmentArmed = true;
+    player.juggernautJudgmentCooldown = JUGGERNAUT_JUDGMENT_COOLDOWN;
+    addSpark(player.x + Math.cos(player.angle) * 42, player.y + Math.sin(player.angle) * 42, "#f0d37a", 8);
+  }
   if (player.tankKey === "railgun" && keys.has("e") && player.railGiantCooldown <= 0 && !player.railGiantArmed) {
     player.railGiantArmed = true;
     player.railGiantCooldown = RAILGUN_GIANT_COOLDOWN;
@@ -4035,10 +4089,12 @@ function firePlayer(dt, target) {
       nukeExplosion: player.mods.nukeExplosion || false,
       afterburnDps: player.mods.afterburnDps || 0,
       afterburnTime: player.mods.afterburnTime || 0,
+      juggernautJudgment: player.tankKey === "juggernaut" && player.juggernautJudgmentArmed,
       r: 5 * player.mods.shellSize,
       color: player.mods.afterburnDps ? "#ff8d45" : "#f7e58b",
     });
   }
+  if (player.tankKey === "juggernaut" && player.juggernautJudgmentArmed) player.juggernautJudgmentArmed = false;
   if (bullets.length > MAX_PLAYER_BULLETS) bullets.splice(0, bullets.length - MAX_PLAYER_BULLETS);
 }
 
@@ -4765,6 +4821,7 @@ function explodeFireworkBullet(b, ownerTeam = "player", ignoredEnemyId = null) {
       miniNuke: Boolean(b.nukeExplosion),
       afterburnDps: b.afterburnDps ? b.afterburnDps * 0.45 : 0,
       afterburnTime: b.afterburnTime ? b.afterburnTime * 0.65 : 0,
+      juggernautJudgment: Boolean(b.juggernautJudgment),
       color: b.afterburnDps ? "#ff8d45" : ownerTeam === "enemy" ? "#ffcf5f" : "#ffe58a",
     };
     if (ownerTeam === "enemy") {
@@ -5388,15 +5445,15 @@ function createVariantLoadout(variant, level = player.level) {
   } else if (variant === "defaultIncendiary") {
     mods.bulletCount = 1;
     mods.bulletSpread = 0;
-    mods.shellDamage = 1.75 + tier * 0.12;
-    mods.shellSize = 1.7;
-    mods.fireworkFragments = 8 + Math.floor(tier / 2);
-    mods.afterburnDps = 18 + tier * 1.25;
-    mods.afterburnTime = 3.4 + tier * 0.12;
-    mods.fireRate = 0.52 + tier * 0.035;
-    mods.bulletSpeed = 0.78 + tier * 0.035;
-    mods.range = 1.78 + tier * 0.08;
-    speed = 176 + tier;
+    mods.shellDamage = 1.25 + tier * 0.08;
+    mods.shellSize = 1.38;
+    mods.fireworkFragments = 13 + Math.floor(tier * 0.65);
+    mods.afterburnDps = 25 + tier * 1.7;
+    mods.afterburnTime = 4.2 + tier * 0.16;
+    mods.fireRate = 0.62 + tier * 0.035;
+    mods.bulletSpeed = 0.68 + tier * 0.03;
+    mods.range = 1.6 + tier * 0.07;
+    speed = 182 + tier;
   } else if (variant === "defaultQuad") {
     mods.bulletCount = 4 + Math.floor(tier / 3);
     mods.bulletSpread = 0.14 + tier * 0.015;
@@ -5670,6 +5727,30 @@ function applyEvolutionFormMods(variant, mods, speed) {
     mods.bulletSpeed *= 0.92;
     return speed - 10;
   }
+  if (has("incendiary") || has("cinder") || has("napalm") || has("wildfire")) {
+    mods.fireworkFragments = Math.max(mods.fireworkFragments || 0, 10 + stage * 2);
+    mods.afterburnDps = Math.max(mods.afterburnDps || 0, 22 + stage * 2.4);
+    mods.afterburnTime = Math.max(mods.afterburnTime || 0, 3.6 + stage * 0.18);
+    mods.shellDamage *= 0.92 + stagePower * 0.06;
+    mods.bulletSpeed *= 0.92;
+    if (has("napalm")) {
+      mods.afterburnTime *= 1.45;
+      mods.range *= 1.08;
+      return speed - 4;
+    }
+    if (has("wildfire")) {
+      mods.fireworkFragments += 5 + Math.floor(stage / 2);
+      mods.afterburnDps *= 1.18;
+      mods.shellSize *= 1.08;
+      return speed - 7;
+    }
+    if (has("cinder")) {
+      mods.afterburnDps *= 1.28;
+      mods.fireRate *= 1.08;
+      return speed + 4;
+    }
+    return speed - 3;
+  }
   if (has("fireburst") || has("mortar") || has("nova") || has("cracker") || has("cometfan")) {
     mods.fireworkFragments = Math.max(mods.fireworkFragments || 0, 8 + stage * 2);
     mods.shellDamage *= has("cracker") ? 0.72 : 1.18 + stagePower * 0.08;
@@ -5853,6 +5934,8 @@ function updateHitAnimations(dt) {
     tank.punchAnim = Math.max(0, (tank.punchAnim || 0) - dt);
     tank.thornsCooldown = Math.max(0, (tank.thornsCooldown || 0) - dt);
     tank.stun = Math.max(0, (tank.stun || 0) - dt);
+    tank.juggernautJudgment = Math.max(0, (tank.juggernautJudgment || 0) - dt);
+    tank.juggernautJudgmentPulse = Math.max(0, (tank.juggernautJudgmentPulse || 0) - dt);
     if (tank.knockVx || tank.knockVy) {
       tank.x = clamp(tank.x + (tank.knockVx || 0) * dt, 32, world.w - 32);
       tank.y = clamp(tank.y + (tank.knockVy || 0) * dt, 32, world.h - 32);
@@ -5960,6 +6043,7 @@ function updateBullets(dt) {
           bullets.splice(i, 1);
           break;
         }
+        if (b.juggernautJudgment) applyJuggernautJudgment(enemy);
         const damage = enemyIncomingDamage(enemy, playerDamage(b.damage, enemy));
         enemy.hp -= damage;
         if (b.afterburnDps) {
@@ -7552,6 +7636,13 @@ function drawEnemy(enemy) {
     ctx.arc(enemy.x, enemy.y, enemy.r + 5 + Math.sin(performance.now() * 0.012) * 2, 0, TAU);
     ctx.stroke();
   }
+  if ((enemy.juggernautJudgment || 0) > 0) {
+    ctx.strokeStyle = "rgba(240,211,122,0.82)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(enemy.x, enemy.y, enemy.r + 10 + Math.sin(performance.now() * 0.014) * 2, 0, TAU);
+    ctx.stroke();
+  }
 }
 
 function drawBullet(b) {
@@ -7984,7 +8075,9 @@ function drawHud() {
         ? 226
         : player.tankKey === "tazer"
           ? 346
-          : player.tankKey === "gamma" || player.tankKey === "juggernaut"
+          : player.tankKey === "juggernaut"
+            ? 196
+            : player.tankKey === "gamma"
             ? 166
             : 136;
   roundRect(pad, pad, 360 * camera.scale, panelHeight * camera.scale, 8 * camera.scale);
@@ -8033,7 +8126,16 @@ function drawHud() {
       "#f0d37a",
       domain ? `E dominance active ${domain.life.toFixed(1)}s` : `E dominance ${Math.ceil(player.juggernautDomainCooldown || 0)}s`
     );
-    infoY = 142;
+    bar(
+      pad + 16 * camera.scale,
+      pad + 138 * camera.scale,
+      310 * camera.scale,
+      12 * camera.scale,
+      player.juggernautJudgmentArmed ? 1 : 1 - (player.juggernautJudgmentCooldown || 0) / JUGGERNAUT_JUDGMENT_COOLDOWN,
+      "#ffe58a",
+      player.juggernautJudgmentArmed ? "Q judgment armed" : `Q judgment ${Math.ceil(player.juggernautJudgmentCooldown || 0)}s`
+    );
+    infoY = 172;
   } else if (player.tankKey === "tazer") {
     bar(
       pad + 16 * camera.scale,
