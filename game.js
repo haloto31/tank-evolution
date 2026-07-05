@@ -128,13 +128,15 @@ const JUGGERNAUT_DOMAIN_PLAYER_BUFF = 1.5;
 const JUGGERNAUT_DOMAIN_ENEMY_MULT = 0.7;
 const JUGGERNAUT_JUDGMENT_COOLDOWN = 20;
 const JUGGERNAUT_JUDGMENT_DURATION = 6;
-const JUGGERNAUT_JUDGMENT_SLOW = 0.5;
-const JUGGERNAUT_JUDGMENT_VULNERABLE = 1.5;
+const JUGGERNAUT_JUDGMENT_SLOW = 0.01;
+const JUGGERNAUT_JUDGMENT_DAMAGE_MULT = 1.3;
 const JUGGERNAUT_RESOLVE_COOLDOWN = 40;
 const JUGGERNAUT_RESOLVE_DURATION = 10;
 const JUGGERNAUT_RESOLVE_HP_MULT = 1.4;
 const JUGGERNAUT_RESOLVE_DAMAGE_BUFF = 1.2;
 const JUGGERNAUT_RESOLVE_DAMAGE_TAKEN_MULT = 0.5;
+const JUGGERNAUT_RESOLVE_ENEMY_HP_MULT = 0.7;
+const JUGGERNAUT_RESOLVE_ENEMY_DAMAGE_MULT = 0.7;
 const MAX_EVOLUTION_STAGE = 30;
 const MAX_SPARKS = 24;
 const MAX_LIGHTNING = 24;
@@ -1786,7 +1788,9 @@ function playerDamage(amount, target = null) {
 
 function enemyAttackDamage(enemy, amount) {
   const domainMult = inJuggernautDomain(enemy) ? JUGGERNAUT_DOMAIN_ENEMY_MULT : 1;
-  return amount * (enemy?.damageMult || 1) * domainMult;
+  const resolveNerf = juggernautResolveActive() && enemy?.team === "enemy" ? JUGGERNAUT_RESOLVE_ENEMY_DAMAGE_MULT : 1;
+  const judgmentRisk = (enemy?.juggernautJudgment || 0) > 0 ? JUGGERNAUT_JUDGMENT_DAMAGE_MULT : 1;
+  return amount * (enemy?.damageMult || 1) * domainMult * resolveNerf * judgmentRisk;
 }
 
 function tazerStormPenaltyActive() {
@@ -1914,7 +1918,7 @@ function updateJuggernautDomain(dt) {
 
 function enemyIncomingDamage(enemy, amount) {
   let finalAmount = inJuggernautDomain(enemy) ? amount * JUGGERNAUT_DOMAIN_PLAYER_BUFF : amount;
-  if ((enemy?.juggernautJudgment || 0) > 0) finalAmount *= JUGGERNAUT_JUDGMENT_VULNERABLE;
+  if (juggernautResolveActive() && enemy?.team === "enemy") finalAmount *= 1 / JUGGERNAUT_RESOLVE_ENEMY_HP_MULT;
   if (!enemy?.shielderTrooper) return finalAmount;
   triggerShielderThorns(enemy, finalAmount);
   return finalAmount * 0.2;
