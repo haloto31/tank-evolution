@@ -4983,15 +4983,27 @@ function prepareLevelChoices() {
   return upgradeChoices;
 }
 
+function focusGameCanvas() {
+  canvas.setAttribute("tabindex", "-1");
+  canvas.focus({ preventScroll: true });
+}
+
 function renderUpgradeButton([name, description, effect], compact = false) {
   const card = document.createElement("button");
+  card.type = "button";
   card.className = compact ? "side-upgrade-card" : "upgrade-card";
   card.innerHTML = `
     <h3>${name} Stage ${variantStages[effect.variant] || "?"}</h3>
     <p>${description}</p>
     <div class="stats">${effectText(effect).map((stat) => `<span class="stat">${stat}</span>`).join("")}</div>
   `;
-  card.addEventListener("click", () => applyUpgrade(name, effect));
+  card.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (card.disabled) return;
+    card.disabled = true;
+    applyUpgrade(name, effect);
+  });
   return card;
 }
 
@@ -5094,7 +5106,18 @@ function effectText(effect) {
 }
 
 function applyUpgrade(name, effect) {
+  if (pendingUpgradeTokens <= 0 || !effect?.variant || !upgradeChoices.some(([, , choiceEffect]) => choiceEffect === effect)) {
+    renderPendingUpgrades();
+    focusGameCanvas();
+    return;
+  }
   const loadout = createVariantLoadout(effect.variant);
+  if (!loadout?.mods) {
+    upgradeChoices = [];
+    renderPendingUpgrades();
+    focusGameCanvas();
+    return;
+  }
   player.buildName = name;
   player.tankStage = Math.max(player.tankStage, variantStages[effect.variant] || player.tankStage + 1);
   player.tankKey = upgradeFamilyForVariant(effect.variant, player.tankKey);
@@ -5116,6 +5139,7 @@ function applyUpgrade(name, effect) {
   upgradeChoices = [];
   if (pendingUpgradeTokens > 0) prepareLevelChoices();
   else renderPendingUpgrades();
+  focusGameCanvas();
 }
 
 function upgradeFamilyForVariant(variant, currentFamily) {
