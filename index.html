@@ -46,6 +46,10 @@
             </label>
             <p id="wave-skip-status" class="wave-skip-status" aria-live="polite"></p>
           </div>
+          <div class="leaderboard-panel" aria-label="Highest level leaderboard">
+            <strong>Highest levels</strong>
+            <ol id="start-leaderboard" class="leaderboard-list"></ol>
+          </div>
           <div class="tank-grid" id="tank-grid"></div>
           <p class="hint">Move with WASD or arrow keys. Aim with the mouse. Click or hold Space to fire. Press Esc to pause.</p>
         </div>
@@ -72,6 +76,10 @@
           <p class="eyebrow">Your tank is scrap</p>
           <h2>Game Over</h2>
           <p id="final-stats"></p>
+          <div class="leaderboard-panel game-over-leaderboard" aria-label="Highest level leaderboard">
+            <strong>Highest levels</strong>
+            <ol id="game-over-leaderboard" class="leaderboard-list"></ol>
+          </div>
           <button id="restart-button">Play Again</button>
         </div>
       </section>

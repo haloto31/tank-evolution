@@ -14,6 +14,8 @@ const upgradeGrid = document.getElementById("upgrade-grid");
 const pendingUpgradePanel = document.getElementById("pending-upgrade-panel");
 const pendingUpgradeList = document.getElementById("pending-upgrade-list");
 const pendingUpgradeCount = document.getElementById("pending-upgrade-count");
+const startLeaderboard = document.getElementById("start-leaderboard");
+const gameOverLeaderboard = document.getElementById("game-over-leaderboard");
 const waveSkipInput = document.getElementById("wave-skip-input");
 const waveSkipPassword = document.getElementById("wave-skip-password");
 const waveSkipStatus = document.getElementById("wave-skip-status");
@@ -122,6 +124,8 @@ const VICTORY_BOSS_LEVEL = 21;
 const FINAL_BOSS_DAMAGE_MULTIPLIER = 1 / 3;
 const FINAL_BOSS_RELOAD = 5;
 const WAVE_SKIP_PASSWORD = "01028224915";
+const LEADERBOARD_KEY = "tankEvolutionHighestLevels";
+const LEADERBOARD_LIMIT = 5;
 const JUGGERNAUT_DOMAIN_COOLDOWN = 50;
 const JUGGERNAUT_DOMAIN_DURATION = 10;
 const JUGGERNAUT_DOMAIN_RADIUS = 520;
@@ -157,6 +161,7 @@ let upgradeChoices = [];
 let pendingUpgradeTokens = 0;
 let nextEnemyId = 1;
 const bossSpawnedLevels = new Set();
+let runLeaderboardRecorded = false;
 let selectedGameMode = "evolution";
 let activeGameMode = "evolution";
 let infantryArmySpawned = 0;
@@ -1263,6 +1268,63 @@ function isBossLevel(level) {
   return level % BOSS_LEVEL_INTERVAL === 0 || level === VICTORY_BOSS_LEVEL;
 }
 
+function loadLeaderboard() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((entry) => Number.isFinite(entry.level)).slice(0, LEADERBOARD_LIMIT) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveLeaderboard(entries) {
+  try {
+    localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(entries.slice(0, LEADERBOARD_LIMIT)));
+  } catch {
+    // Storage can fail in private modes; the game should keep running.
+  }
+}
+
+function renderLeaderboard() {
+  const entries = loadLeaderboard();
+  [startLeaderboard, gameOverLeaderboard].forEach((list) => {
+    if (!list) return;
+    list.innerHTML = "";
+    if (entries.length === 0) {
+      const item = document.createElement("li");
+      item.textContent = "No runs yet";
+      list.appendChild(item);
+      return;
+    }
+    entries.forEach((entry) => {
+      const item = document.createElement("li");
+      const label = document.createElement("span");
+      const detail = document.createElement("small");
+      label.textContent = `Lv ${entry.level}`;
+      detail.textContent = `${entry.kills || 0} kills - ${entry.tank || "Tank"} - ${entry.mode || "Normal"}`;
+      item.append(label, detail);
+      list.appendChild(item);
+    });
+  });
+}
+
+function recordLeaderboardRun(reason = "defeat") {
+  if (runLeaderboardRecorded || !player.level || gameState === "start") return;
+  runLeaderboardRecorded = true;
+  const entries = loadLeaderboard();
+  entries.push({
+    level: player.level,
+    kills: player.kills,
+    tank: player.buildName,
+    mode: activeGameMode === "infantryArmy" ? "Army" : "Normal",
+    reason,
+    at: Date.now(),
+  });
+  entries.sort((a, b) => b.level - a.level || b.kills - a.kills || (b.at || 0) - (a.at || 0));
+  saveLeaderboard(entries);
+  renderLeaderboard();
+}
+
 function xpNextForLevel(level) {
   let xpNext = 100;
   for (let current = 1; current < level; current += 1) {
@@ -1292,7 +1354,7 @@ function hasPasswordAccess() {
 }
 
 function starterNeedsPassword(tank) {
-  return tank.key === "tazer" || tank.key === "dragonTamer" || tank.key === "juggernaut" || tank.key === "startUltra" || tank.variant === "defaultUltra";
+  return tank.key === "tazer" || tank.key === "dragonTamer" || tank.key === "startJuggernaut" || tank.key === "startUltra" || tank.familyKey === "juggernaut" || tank.variant === "defaultJuggernaut" || tank.variant === "defaultUltra";
 }
 
 function applyWaveSkip(wave) {
@@ -1412,6 +1474,7 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
   nextEnemyId = 1;
   infantryArmySpawned = 0;
   bossSpawnedLevels.clear();
+  runLeaderboardRecorded = false;
   gameState = "playing";
   showOnly();
   renderPendingUpgrades();
@@ -6441,15 +6504,12 @@ function updateEnemies(dt) {
     if (enemy.hp <= 0) {
       const defeatedVictoryBoss = enemy.victoryBoss && enemy.team !== "ally";
       addSpark(enemy.x, enemy.y, "#f2ca52", 16);
-      if (enemy.team !== "ally" && !enemy.infantry && enemy.tankKey !== "dragon" && !defeatedVictoryBoss) spawnInfantryPack(enemy);
+      if (enemy.team !== "ally" && !enemy.infantry && enemy.tankKey !== "dragon") spawnInfantryPack(enemy);
       enemies.splice(i, 1);
       if (enemy.team !== "ally") {
         player.kills += enemy.boss ? 10 : 1;
         if (player.perks.killHeal) player.hp = Math.min(player.maxHp, player.hp + player.perks.killHeal);
-        if (defeatedVictoryBoss) {
-          winGame("level21Boss");
-          continue;
-        }
+        if (defeatedVictoryBoss) addSpark(player.x, player.y, "#ffef88", 28);
         gainXp(xpRewardForEnemy(enemy));
       }
     }
@@ -6586,18 +6646,21 @@ function updateParticles(dt) {
 }
 
 function endGame() {
+  recordLeaderboardRun("defeat");
   gameState = "gameOver";
   finalStats.textContent = `Level ${player.level} - ${player.kills} enemies destroyed - ${player.buildName}`;
   showOnly("gameOver");
 }
 
 function endGameFromPause() {
+  recordLeaderboardRun("ended");
   gameState = "gameOver";
   finalStats.textContent = `Ended run - Level ${player.level} - ${player.kills} enemies destroyed - ${player.buildName}`;
   showOnly("gameOver");
 }
 
 function winGame(reason = "level21Boss") {
+  recordLeaderboardRun(reason);
   gameState = "gameOver";
   finalStats.textContent =
     reason === "army"
@@ -8498,5 +8561,6 @@ restartButton.addEventListener("click", () => {
 buildStart();
 setupMultiplayer();
 resize();
+renderLeaderboard();
 showOnly("start");
 requestAnimationFrame(loop);

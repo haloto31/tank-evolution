@@ -331,6 +331,45 @@ h2 {
   align-content: center;
 }
 
+.leaderboard-panel {
+  border: 1px solid rgba(242, 202, 82, 0.32);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.055);
+  margin: 0 0 18px;
+  padding: 12px;
+}
+
+.leaderboard-panel strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.leaderboard-list {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding-left: 24px;
+}
+
+.leaderboard-list li {
+  color: var(--ink);
+  line-height: 1.2;
+}
+
+.leaderboard-list span {
+  font-weight: 900;
+}
+
+.leaderboard-list small {
+  color: var(--muted);
+  display: block;
+  font-size: 0.78rem;
+}
+
+.game-over-leaderboard {
+  text-align: left;
+}
+
 .tank-card,
 .upgrade-card {
   min-height: 240px;
