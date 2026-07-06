@@ -1422,7 +1422,7 @@ function hasPasswordAccess() {
 }
 
 function starterNeedsPassword(tank) {
-  return tank.key === "tazer" || tank.key === "dragonTamer" || tank.key === "startIncendiary" || tank.key === "startJuggernaut" || tank.key === "startUltra" || tank.familyKey === "juggernaut" || tank.variant === "defaultJuggernaut" || tank.variant === "defaultUltra";
+  return tank.key === "tazer" || tank.key === "dragonTamer" || tank.key === "thunderGod" || tank.key === "startIncendiary" || tank.key === "startJuggernaut" || tank.key === "startUltra" || tank.familyKey === "juggernaut" || tank.variant === "defaultJuggernaut" || tank.variant === "defaultUltra";
 }
 
 function applyWaveSkip(wave) {
