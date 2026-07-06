@@ -94,6 +94,9 @@ const THUNDER_GOD_FOCUS_COOLDOWN = 55;
 const THUNDER_GOD_FOCUS_STRIKES = 100;
 const THUNDER_GOD_FOCUS_INTERVAL = 0.055;
 const THUNDER_GOD_FOCUS_DAMAGE_MULT = 0.5;
+const THUNDER_GOD_REVIVE_MAX = 3;
+const THUNDER_GOD_REVIVE_WINDOW = 30;
+const THUNDER_GOD_REVIVE_STAT_MULT = 1.5;
 const TAZER_GUARD_COOLDOWN = 45;
 const TAZER_GUARD_DURATION = 10;
 const TAZER_GUARD_DAMAGE_MULTIPLIER = 0.05;
@@ -232,6 +235,10 @@ const player = {
   thunderBuffCooldown: 0,
   thunderBuffActive: 0,
   thunderFocusCooldown: 0,
+  thunderRevivesUsed: 0,
+  thunderReviveReady: false,
+  thunderReviveTrial: 0,
+  thunderReviveTargetLevel: 0,
   fireShieldCooldown: 0,
   fireShieldActive: 0,
   juggernautDomainCooldown: 0,
@@ -1469,6 +1476,10 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
     thunderBuffCooldown: 0,
     thunderBuffActive: 0,
     thunderFocusCooldown: 0,
+    thunderRevivesUsed: 0,
+    thunderReviveReady: Boolean(starterPerks.thunderGod),
+    thunderReviveTrial: 0,
+    thunderReviveTargetLevel: 0,
     fireShieldCooldown: 0,
     fireShieldActive: 0,
     juggernautDomainCooldown: 0,
@@ -1927,7 +1938,56 @@ function thunderGodBuffActive() {
 }
 
 function thunderGodStatMult() {
-  return thunderGodBuffActive() ? THUNDER_GOD_STAT_MULT : 1;
+  const reviveMult = Math.pow(THUNDER_GOD_REVIVE_STAT_MULT, player.thunderRevivesUsed || 0);
+  return (thunderGodBuffActive() ? THUNDER_GOD_STAT_MULT : 1) * reviveMult;
+}
+
+function thunderGodReviveHpMult() {
+  return isThunderGod() ? Math.pow(THUNDER_GOD_REVIVE_STAT_MULT, player.thunderRevivesUsed || 0) : 1;
+}
+
+function thunderGodBaseMaxHp() {
+  return Math.max(1, Math.round((player.perks.fixedMaxHp || player.maxHp || 1) * thunderGodReviveHpMult()));
+}
+
+function tryThunderGodRevive() {
+  if (!isThunderGod() || !player.thunderReviveReady || (player.thunderRevivesUsed || 0) >= THUNDER_GOD_REVIVE_MAX) return false;
+  player.thunderRevivesUsed += 1;
+  player.thunderReviveReady = false;
+  player.thunderReviveTrial = THUNDER_GOD_REVIVE_WINDOW;
+  player.thunderReviveTargetLevel = player.level + 1;
+  player.maxHp = thunderGodBaseMaxHp();
+  player.hp = Math.max(1, Math.round(player.maxHp * 0.55));
+  player.invuln = Math.max(player.invuln || 0, 2.5);
+  player.stun = 0;
+  player.cooldown = 0;
+  addSpark(player.x, player.y, "#fff06d", 44);
+  addSpark(player.x, player.y, "#8df5ff", 28);
+  lightning.push({
+    x1: player.x,
+    y1: Math.max(0, player.y - 680),
+    x2: player.x,
+    y2: player.y,
+    life: 0.34,
+    max: 0.34,
+    color: "#fff06d",
+    glowColor: "rgba(255,240,109,0.55)",
+    glowFade: "rgba(255,240,109,0)",
+    large: true,
+    skyStrike: true,
+    width: 14,
+    burst: 90,
+  });
+  if (lightning.length > MAX_LIGHTNING) lightning.splice(0, lightning.length - MAX_LIGHTNING);
+  camera.shake = Math.max(camera.shake, 16);
+  return true;
+}
+
+function checkPlayerDeath() {
+  if (player.hp > 0) return false;
+  if (tryThunderGodRevive()) return true;
+  endGame();
+  return true;
 }
 
 function playerDamage(amount, target = null) {
@@ -2132,7 +2192,7 @@ function triggerShielderThorns(shielder, incomingAmount) {
     player.invuln = 0.06;
     markHit(player, hit, shielder);
     lightning.push({ x1: shielder.x, y1: shielder.y, x2: player.x, y2: player.y, life: 0.12, max: 0.12, color: "#a7c7ff" });
-    if (player.hp <= 0) endGame();
+    if (player.hp <= 0) checkPlayerDeath();
   }
   if (lightning.length > MAX_LIGHTNING) lightning.splice(0, lightning.length - MAX_LIGHTNING);
 }
@@ -2645,7 +2705,7 @@ function detonateGammaLightning(bullet, ownerTeam = "player") {
         player.invuln = 0.05;
         markHit(player, currentDamage, { ...bullet, noKnockback: true });
         player.stun = Math.max(player.stun || 0, stunSeconds);
-        if (player.hp <= 0) endGame();
+        if (player.hp <= 0) checkPlayerDeath();
       }
     } else {
       hitTargets.add(target.id);
@@ -3393,7 +3453,7 @@ function enemyTazerChainAttack(enemy, target) {
       width: jump === 0 ? 4 : 2.5,
     });
     addSpark(current.x, current.y, "#ffe66d", 2);
-    if (current === player && player.hp <= 0) endGame();
+    if (current === player && player.hp <= 0) checkPlayerDeath();
 
     previous = current;
     damage *= 0.74;
@@ -3947,7 +4007,7 @@ function enemyPunchAttack(enemy, target) {
     player.hp -= playerIncomingDamage(damage);
     player.invuln = 0.08;
     markHit(player, damage, enemy);
-    if (player.hp <= 0) endGame();
+    if (player.hp <= 0) checkPlayerDeath();
   } else {
     target.hp -= damage;
     markHit(target, damage, enemy);
@@ -4031,7 +4091,7 @@ function updateDragonAlly(dragon, dt) {
           player.invuln = 0.04;
           markHit(player, damage, dragon);
           if (Math.random() < 8 * dt) addSpark(player.x, player.y, "#ff6f35", 1);
-          if (player.hp <= 0) endGame();
+          if (player.hp <= 0) checkPlayerDeath();
         }
       } else {
         for (let i = 0; i < enemies.length && hits < PLAYER_WEAPON_PIERCE; i += 1) {
@@ -5223,7 +5283,7 @@ function ultraNukeExplosion(b, ownerTeam = "player") {
       player.invuln = mini ? 0.08 : 0.18;
       markHit(player, hitDamage * 0.08, b);
       addSpark(player.x, player.y, "#ffcf5f", mini ? 4 : 10);
-      if (player.hp <= 0) endGame();
+      if (player.hp <= 0) checkPlayerDeath();
     }
     enemies.forEach((ally) => {
       if (ally.team !== "ally") return;
@@ -5301,7 +5361,7 @@ function gainXp(amount) {
     const resolveActive = player.tankKey === "juggernaut" && (player.juggernautResolveActive || 0) > 0;
     const temporaryHpBonus = (player.tazerGuardHpBonus || 0) + (player.juggernautResolveHpBonus || 0);
     const newBaseMaxHp = player.perks.fixedMaxHp
-      ? player.perks.fixedMaxHp
+      ? Math.max(1, Math.round(player.perks.fixedMaxHp * thunderGodReviveHpMult()))
       : player.lockedTank
         ? Math.max(1, player.maxHp - temporaryHpBonus)
         : Math.max(1, Math.round(scaledTankMaxHp(player.level) * (player.perks.maxHpMult || 1) * penaltyMult));
@@ -5312,6 +5372,13 @@ function gainXp(amount) {
     if (activeGameMode !== "infantryArmy" && (player.lockedTank || isBossLevel(player.level)) && !bossSpawnedLevels.has(player.level)) {
       bossSpawnedLevels.add(player.level);
       spawnBoss(player.level);
+    }
+    if (isThunderGod() && (player.thunderReviveTrial || 0) > 0 && player.level >= (player.thunderReviveTargetLevel || Infinity)) {
+      player.thunderReviveTrial = 0;
+      player.thunderReviveTargetLevel = 0;
+      player.thunderReviveReady = (player.thunderRevivesUsed || 0) < THUNDER_GOD_REVIVE_MAX;
+      addSpark(player.x, player.y, "#fff06d", 22);
+      addSpark(player.x, player.y, "#8df5ff", 12);
     }
     if (!player.lockedTank && upgradePools[player.tankKey]) {
       pendingUpgradeTokens += 1;
@@ -6339,6 +6406,16 @@ function applyEvolutionFormMods(variant, mods, speed) {
   return speed;
 }
 
+function updateThunderGodReviveTrial(dt) {
+  if (!isThunderGod() || (player.thunderReviveTrial || 0) <= 0) return;
+  player.thunderReviveTrial = Math.max(0, player.thunderReviveTrial - dt);
+  if (player.thunderReviveTrial <= 0 && player.level < (player.thunderReviveTargetLevel || Infinity)) {
+    player.hp = 0;
+    addSpark(player.x, player.y, "#fff06d", 18);
+    endGame();
+  }
+}
+
 function update(dt) {
   let target = screenToWorld(mouse.x, mouse.y);
   if (touchFire.active && player.tankKey !== "airstrike") {
@@ -6346,6 +6423,8 @@ function update(dt) {
   }
   player.angle = angleTo(player, target);
   player.invuln = Math.max(0, player.invuln - dt);
+  updateThunderGodReviveTrial(dt);
+  if (gameState !== "playing") return;
   updateJuggernautDomain(dt);
   updateTazerGuard(dt);
   player.hp = Math.min(player.maxHp, player.hp + regenAmount(player, dt));
@@ -6363,7 +6442,7 @@ function update(dt) {
   if ((player.stun || 0) <= 0) {
     const stormSpeedMult = tazerStormPenaltyActive() ? 0.5 : 1;
     const juggernautSpeedMult = juggernautPlayerBuffActive() ? JUGGERNAUT_DOMAIN_PLAYER_BUFF : 1;
-    const thunderSpeedMult = thunderGodBuffActive() ? THUNDER_GOD_SPEED_MULT : 1;
+    const thunderSpeedMult = (thunderGodBuffActive() ? THUNDER_GOD_SPEED_MULT : 1) * thunderGodReviveHpMult();
     player.x = clamp(player.x + (dx / len) * player.speed * stormSpeedMult * juggernautSpeedMult * thunderSpeedMult * dt, 32, world.w - 32);
     player.y = clamp(player.y + (dy / len) * player.speed * stormSpeedMult * juggernautSpeedMult * thunderSpeedMult * dt, 32, world.h - 32);
   }
@@ -6560,7 +6639,7 @@ function updateBullets(dt) {
         b.hitPlayer = true;
         markHit(player, damage, b);
         addSpark(player.x, player.y, b.color, 7);
-        if (player.hp <= 0) endGame();
+        if (player.hp <= 0) checkPlayerDeath();
       }
       for (let j = enemies.length - 1; j >= 0; j -= 1) {
         const ally = enemies[j];
@@ -6630,7 +6709,7 @@ function updateBullets(dt) {
       explodeFireworkBullet(b, "enemy");
       addSpark(player.x, player.y, "#f1f1dc", 4);
       enemyBullets.splice(i, 1);
-      if (player.hp <= 0) endGame();
+      if (player.hp <= 0) checkPlayerDeath();
       continue;
     }
     if (b.ownerRemoteId) {
@@ -6832,7 +6911,7 @@ function updateEnemies(dt) {
       player.invuln = 0.35;
       markHit(player, touchDamage, enemy);
       addSpark(player.x, player.y, "#e65735", 8);
-      if (player.hp <= 0) endGame();
+      if (player.hp <= 0) checkPlayerDeath();
     }
     if (enemy.hp <= 0) {
       const defeatedVictoryBoss = enemy.victoryBoss && enemy.team !== "ally";
@@ -8652,7 +8731,7 @@ function drawHud() {
         : player.tankKey === "tazer"
           ? 346
           : isThunderGod()
-          ? 196
+          ? 226
           : player.tankKey === "juggernaut"
             ? 226
             : player.tankKey === "incendiary" && player.mods?.fireShieldAbility
@@ -8704,10 +8783,24 @@ function drawHud() {
       "#8df5ff",
       thunderStorm ? `E judgment ${thunderStorm.strikesLeft} bolts` : `E judgment ${Math.ceil(player.thunderFocusCooldown || 0)}s`
     );
+    const reviveLabel = (player.thunderReviveTrial || 0) > 0
+      ? `Revive trial: level ${player.thunderReviveTargetLevel} in ${Math.ceil(player.thunderReviveTrial)}s`
+      : player.thunderReviveReady
+        ? `Revive ready ${player.thunderRevivesUsed || 0}/${THUNDER_GOD_REVIVE_MAX}`
+        : `Revives used ${player.thunderRevivesUsed || 0}/${THUNDER_GOD_REVIVE_MAX}`;
+    bar(
+      pad + 16 * camera.scale,
+      pad + 168 * camera.scale,
+      310 * camera.scale,
+      12 * camera.scale,
+      (player.thunderReviveTrial || 0) > 0 ? (player.thunderReviveTrial || 0) / THUNDER_GOD_REVIVE_WINDOW : 1 - (player.thunderRevivesUsed || 0) / THUNDER_GOD_REVIVE_MAX,
+      (player.thunderReviveTrial || 0) > 0 ? "#ffef88" : "#fff06d",
+      reviveLabel
+    );
     ctx.fillStyle = "#aeb5ad";
     ctx.font = `${12 * camera.scale}px system-ui, sans-serif`;
-    ctx.fillText("Click: targeted thunder airstrike", pad + 16 * camera.scale, pad + 167 * camera.scale);
-    infoY = 172;
+    ctx.fillText(`Click: targeted thunder airstrike  |  ${thunderGodStatMult().toFixed(2)}x stats`, pad + 16 * camera.scale, pad + 198 * camera.scale);
+    infoY = 202;
   } else if (player.tankKey === "gamma") {
     bar(
       pad + 16 * camera.scale,
