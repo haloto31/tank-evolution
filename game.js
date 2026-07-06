@@ -125,6 +125,7 @@ const TAZER_REGEN_PERCENT_PER_SECOND = 0.005;
 const HIT_KNOCKBACK_SPEED = 135;
 const DEFAULT_BULLET_DAMAGE = 7.5;
 const BOSS_LEVEL_INTERVAL = 10;
+const BOSS_WEAKNESS_MULTIPLIER = 0.5;
 const LEVEL_TEN_BOSS_HP_MULTIPLIER = 100;
 const LEVEL_TEN_BOSS_DAMAGE_MULTIPLIER = 50;
 const FINAL_BOSS_LEVEL = 20;
@@ -3773,9 +3774,10 @@ function spawnBoss(level) {
       }
     : chooseSpawnLoadout(level);
   const isLevelTenBoss = level === BOSS_LEVEL_INTERVAL;
-  const bossHp = isLevelTenBoss
+  const rawBossHp = isLevelTenBoss
     ? Math.max(1, Math.round(player.maxHp * LEVEL_TEN_BOSS_HP_MULTIPLIER))
     : Math.max(1, Math.round(100 * (4 + level * 0.28) * SPECIAL_ENEMY_HP_SCALE));
+  const bossHp = Math.max(1, Math.round(rawBossHp * BOSS_WEAKNESS_MULTIPLIER));
   const side = Math.floor(Math.random() * 4);
   const x = side === 1 ? world.w - 120 : side === 3 ? 120 : Math.random() * world.w;
   const y = side === 0 ? 120 : side === 2 ? world.h - 120 : Math.random() * world.h;
@@ -3792,7 +3794,7 @@ function spawnBoss(level) {
     accent: loadout.accent,
     mods: bossMods,
     level,
-    damageMult: isUltraBoss ? FINAL_BOSS_DAMAGE_MULTIPLIER : isLevelTenBoss ? LEVEL_TEN_BOSS_DAMAGE_MULTIPLIER : 1,
+    damageMult: (isUltraBoss ? FINAL_BOSS_DAMAGE_MULTIPLIER : isLevelTenBoss ? LEVEL_TEN_BOSS_DAMAGE_MULTIPLIER : 1) * BOSS_WEAKNESS_MULTIPLIER,
     x,
     y,
     r: 38,
