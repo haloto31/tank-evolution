@@ -94,6 +94,8 @@ const THUNDER_GOD_FOCUS_COOLDOWN = 55;
 const THUNDER_GOD_FOCUS_STRIKES = 100;
 const THUNDER_GOD_FOCUS_INTERVAL = 0.055;
 const THUNDER_GOD_FOCUS_DAMAGE_MULT = 0.5;
+const THUNDER_GOD_BASE_HP = 1000;
+const THUNDER_GOD_BASE_DAMAGE = 50 / 3;
 const THUNDER_GOD_REVIVE_MAX = 3;
 const THUNDER_GOD_REVIVE_WINDOW = 30;
 const THUNDER_GOD_REVIVE_STAT_MULT = 1.5;
@@ -1099,8 +1101,8 @@ starters.push(
     color: "#172a4d",
     accent: "#fff06d",
     description: "A divine lightning character with airstrike bolts, gamma chaining, huge health, and no regeneration.",
-    stats: ["1000 HP", "50 damage", "Q/E thunder"],
-    perks: { fixedMaxHp: 1000, noRegen: true, thunderGod: true },
+    stats: [`${THUNDER_GOD_BASE_HP} HP`, `${THUNDER_GOD_BASE_DAMAGE.toFixed(1)} damage`, "Q/E thunder"],
+    perks: { fixedMaxHp: THUNDER_GOD_BASE_HP, noRegen: true, thunderGod: true },
   },
   {
     key: "startJuggernaut",
@@ -5703,7 +5705,7 @@ function createVariantLoadout(variant, level = player.level) {
     mods.fireRate = 0.72 + tier * 0.025;
     mods.bulletSpeed = 1.12 + tier * 0.035;
     mods.range = 1.18 + tier * 0.025;
-    mods.shellDamage = 50 / DEFAULT_BULLET_DAMAGE;
+    mods.shellDamage = THUNDER_GOD_BASE_DAMAGE / DEFAULT_BULLET_DAMAGE;
     mods.shellSize = 1.18;
     mods.gammaLightningDamage = 1.45;
     mods.gammaLightningChain = 3;
