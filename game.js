@@ -86,6 +86,14 @@ const TAZER_FOCUS_DAMAGE = 400;
 const TAZER_FOCUS_INTERVAL = 0.012;
 const TAZER_FOCUS_MAX_HP_MULTIPLIER = 0.05;
 const TAZER_FOCUS_COOLDOWN = 70;
+const THUNDER_GOD_BUFF_COOLDOWN = 30;
+const THUNDER_GOD_BUFF_DURATION = 10;
+const THUNDER_GOD_STAT_MULT = 1.9;
+const THUNDER_GOD_SPEED_MULT = 1.3;
+const THUNDER_GOD_FOCUS_COOLDOWN = 55;
+const THUNDER_GOD_FOCUS_STRIKES = 100;
+const THUNDER_GOD_FOCUS_INTERVAL = 0.055;
+const THUNDER_GOD_FOCUS_DAMAGE_MULT = 0.5;
 const TAZER_GUARD_COOLDOWN = 45;
 const TAZER_GUARD_DURATION = 10;
 const TAZER_GUARD_DAMAGE_MULTIPLIER = 0.05;
@@ -220,6 +228,9 @@ const player = {
   adultDragonCooldown: 0,
   blackDragonCooldown: 0,
   gammaStormCooldown: 0,
+  thunderBuffCooldown: 0,
+  thunderBuffActive: 0,
+  thunderFocusCooldown: 0,
   fireShieldCooldown: 0,
   fireShieldActive: 0,
   juggernautDomainCooldown: 0,
@@ -285,6 +296,7 @@ const tazerEndStorms = [];
 const tazerCannonTraps = [];
 const tazerCannonWaves = [];
 const tazerFocusStorms = [];
+const thunderFocusStorms = [];
 
 const multiplayer = {
   enabled: location.protocol === "http:" || location.protocol === "https:",
@@ -530,6 +542,12 @@ const familyUpgradeLines = {
     ["Storm Tazer Tank", "A high-stage Tazer tank with wider electric control.", { variant: "tazer4", color: "#112f46", accent: "#fff39a" }],
     ["Apex Tazer Tank", "A final electric tank built around long, violent chain zaps.", { variant: "tazer5", color: "#1b263b", accent: "#ffe66d" }],
   ],
+  thunderGod: [
+    ["Storm Avatar", "A stronger Thunder God stage with faster targeted sky strikes.", { variant: "thunderGod2", color: "#17395f", accent: "#fff06d" }],
+    ["Skybreaker", "A staged Thunder God form with wider chained lightning blasts.", { variant: "thunderGod3", color: "#12315a", accent: "#8df5ff" }],
+    ["Judgment Thunder God", "A high-stage Thunder God with stronger divine storm pressure.", { variant: "thunderGod4", color: "#102849", accent: "#d7fbff" }],
+    ["Worldstorm Thunder God", "A final divine lightning form with huge gamma-airstrike bursts.", { variant: "thunderGod5", color: "#0d2447", accent: "#fff39a" }],
+  ],
   juggernaut: [
     ["Fortress Juggernaut Tank", "A stronger one-shot nuke cannon with a heavier shell.", { variant: "juggernaut2", color: "#72756b", accent: "#f0d37a" }],
     ["Quake Juggernaut Tank", "A bigger blast juggernaut with more nuke fragments.", { variant: "juggernaut3", color: "#686b64", accent: "#ffcf5f" }],
@@ -600,6 +618,10 @@ const variantAliases = {
   tazer3: "tazerArc",
   tazer4: "tazerStorm",
   tazer5: "tazerStorm",
+  thunderGod2: "thunderGodBase",
+  thunderGod3: "thunderGodBase",
+  thunderGod4: "thunderGodBase",
+  thunderGod5: "thunderGodBase",
   juggernaut2: "defaultJuggernaut",
   juggernaut3: "defaultJuggernaut",
   juggernaut4: "defaultJuggernaut",
@@ -703,6 +725,11 @@ const variantStages = {
   tazer3: 3,
   tazer4: 4,
   tazer5: 5,
+  thunderGodBase: 1,
+  thunderGod2: 2,
+  thunderGod3: 3,
+  thunderGod4: 4,
+  thunderGod5: 5,
   defaultJuggernaut: 1,
   juggernaut2: 2,
   juggernaut3: 3,
@@ -826,6 +853,11 @@ const familyStageForms = {
     { key: "arc", title: "Arc", base: "tazerArc", accent: "#eaffff", color: "#203f5f", focus: "harder chain jumps and faster recharge" },
     { key: "storm", title: "Storm", base: "tazerStorm", accent: "#fff39a", color: "#112f46", focus: "screen control and dense electric reach" },
   ],
+  thunderGod: [
+    { key: "stormlord", title: "Stormlord", base: "thunderGodBase", accent: "#fff06d", color: "#17395f", focus: "faster targeted thunder airstrikes" },
+    { key: "skybreaker", title: "Skybreaker", base: "thunderGodBase", accent: "#8df5ff", color: "#12315a", focus: "larger chained gamma lightning detonations" },
+    { key: "judgment", title: "Judgment", base: "thunderGodBase", accent: "#d7fbff", color: "#102849", focus: "stronger god-mode and judgment storms" },
+  ],
   juggernaut: [
     { key: "fortress", title: "Fortress", base: "defaultJuggernaut", accent: "#f0d37a", color: "#72756b", focus: "one heavier Ultra-style nuke shell" },
     { key: "quake", title: "Quake", base: "defaultJuggernaut", accent: "#ffcf5f", color: "#686b64", focus: "a wider nuke blast with more fragments" },
@@ -882,6 +914,7 @@ addEvolutionStages("incendiary", "Incendiary", "defaultIncendiary", "#ff7b38");
 addEvolutionStages("railgun", "Railgun", "railgunLance", "#88f7ff");
 addEvolutionStages("shotgun", "Shotgun", "shotgunBuck", "#ff9f5a");
 addEvolutionStages("tazer", "Tazer", "tazerCoil", "#ffe66d");
+addEvolutionStages("thunderGod", "Thunder God", "thunderGodBase", "#fff06d");
 addEvolutionStages("juggernaut", "Juggernaut", "defaultJuggernaut", "#f0d37a");
 addEvolutionStages("airstrike", "Airstrike", "airstrikeBase", "#ffcf5f");
 addEvolutionStages("helicopter", "Helicopter", "helicopterBase", "#f2ca52");
@@ -901,6 +934,7 @@ const familyLabels = {
   railgun: "Railgun",
   shotgun: "Shotgun",
   tazer: "Tazer",
+  thunderGod: "Thunder God",
   juggernaut: "Juggernaut",
   airstrike: "Airstrike",
   helicopter: "Helicopter",
@@ -916,6 +950,7 @@ const branchFamilies = {
   defaultAuto: "auto",
   defaultFirework: "firework",
   defaultIncendiary: "incendiary",
+  thunderGodBase: "thunderGod",
   defaultQuad: "triCannon",
   defaultScatter: "fanfire",
   defaultBreaker: "siege",
@@ -1050,14 +1085,14 @@ starters.push(
   },
   {
     key: "thunderGod",
-    familyKey: "default",
+    familyKey: "thunderGod",
     variant: "thunderGodBase",
     name: "Thunder God",
     color: "#172a4d",
     accent: "#fff06d",
-    description: "A divine lightning character with huge health, no regeneration, and brutal 50 damage bolts.",
-    stats: ["1000 HP", "50 base damage", "No regen"],
-    perks: { fixedMaxHp: 1000, noRegen: true },
+    description: "A divine lightning character with airstrike bolts, gamma chaining, huge health, and no regeneration.",
+    stats: ["1000 HP", "50 damage", "Q/E thunder"],
+    perks: { fixedMaxHp: 1000, noRegen: true, thunderGod: true },
   },
   {
     key: "startJuggernaut",
@@ -1430,6 +1465,9 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
     adultDragonCooldown: 0,
     blackDragonCooldown: 0,
     gammaStormCooldown: 0,
+    thunderBuffCooldown: 0,
+    thunderBuffActive: 0,
+    thunderFocusCooldown: 0,
     fireShieldCooldown: 0,
     fireShieldActive: 0,
     juggernautDomainCooldown: 0,
@@ -1499,6 +1537,7 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
   tazerCannonTraps.length = 0;
   tazerCannonWaves.length = 0;
   tazerFocusStorms.length = 0;
+  thunderFocusStorms.length = 0;
   spawnCarry = 0;
   nextEnemyId = 1;
   infantryArmySpawned = 0;
@@ -1878,10 +1917,22 @@ function regenAmount(tank, dt) {
   return tank.maxHp * baseRegen * mult * dt;
 }
 
+function isThunderGod() {
+  return Boolean(player.perks.thunderGod);
+}
+
+function thunderGodBuffActive() {
+  return isThunderGod() && (player.thunderBuffActive || 0) > 0;
+}
+
+function thunderGodStatMult() {
+  return thunderGodBuffActive() ? THUNDER_GOD_STAT_MULT : 1;
+}
+
 function playerDamage(amount, target = null) {
   const bossMult = target?.boss ? player.perks.bossDamageMult || 1 : 1;
   const resolveDamage = juggernautResolveActive() ? JUGGERNAUT_RESOLVE_DAMAGE_BUFF : 1;
-  return amount * (player.perks.damageMult || 1) * bossMult * resolveDamage;
+  return amount * (player.perks.damageMult || 1) * bossMult * resolveDamage * thunderGodStatMult();
 }
 
 function enemyAttackDamage(enemy, amount) {
@@ -1906,7 +1957,8 @@ function playerIncomingDamage(amount) {
   const dominanceDefense = juggernautPlayerBuffActive() ? 1 / JUGGERNAUT_DOMAIN_PLAYER_BUFF : 1;
   const resolveDefense = juggernautResolveActive() ? JUGGERNAUT_RESOLVE_DAMAGE_TAKEN_MULT : 1;
   const fireShieldDefense = fireShieldActive() ? FIRE_SHIELD_DAMAGE_TAKEN_MULT : 1;
-  return amount * (player.perks.damageTakenMult || 1) * stormPenalty * cannonWavePenalty * guardPenalty * dominanceDefense * resolveDefense * fireShieldDefense;
+  const thunderDefense = thunderGodBuffActive() ? 1 / THUNDER_GOD_STAT_MULT : 1;
+  return amount * (player.perks.damageTakenMult || 1) * stormPenalty * cannonWavePenalty * guardPenalty * dominanceDefense * resolveDefense * fireShieldDefense * thunderDefense;
 }
 
 function fireShieldActive() {
@@ -2866,6 +2918,63 @@ function startTazerFocusStorm() {
   return true;
 }
 
+function startThunderGodBuff() {
+  player.thunderBuffCooldown = THUNDER_GOD_BUFF_COOLDOWN;
+  player.thunderBuffActive = THUNDER_GOD_BUFF_DURATION;
+  addSpark(player.x, player.y, "#fff06d", 28);
+  camera.shake = Math.max(camera.shake, 7);
+}
+
+function startThunderFocusStorm() {
+  if (thunderFocusStorms.length > 0) return false;
+  const target = findNearestHostileToPlayer();
+  if (!target) {
+    addSpark(player.x + Math.cos(player.angle) * 52, player.y + Math.sin(player.angle) * 52, "#fff06d", 8);
+    return false;
+  }
+  thunderFocusStorms.push({
+    targetId: target.id,
+    x: target.x,
+    y: target.y,
+    timer: 0,
+    strikesLeft: THUNDER_GOD_FOCUS_STRIKES,
+  });
+  addSpark(target.x, target.y, "#fff06d", 18);
+  camera.shake = Math.max(camera.shake, 10);
+  return true;
+}
+
+function strikeThunderFocusStorm(storm) {
+  const target = enemies.find((enemy) => enemy.id === storm.targetId && enemy.team !== "ally");
+  if (!target || target.hp <= 0) return false;
+  storm.x = target.x;
+  storm.y = target.y;
+  lightning.push({
+    x1: target.x + (Math.random() - 0.5) * 130,
+    y1: Math.max(0, target.y - 620 - Math.random() * 160),
+    x2: target.x + (Math.random() - 0.5) * 16,
+    y2: target.y + (Math.random() - 0.5) * 16,
+    life: 0.16,
+    max: 0.16,
+    color: "#fff06d",
+    glowColor: "rgba(255,240,109,0.4)",
+    glowFade: "rgba(255,240,109,0)",
+    large: true,
+    skyStrike: true,
+    width: 9,
+    burst: 58,
+  });
+  if (lightning.length > MAX_LIGHTNING) lightning.splice(0, lightning.length - MAX_LIGHTNING);
+  const currentShotDamage = DEFAULT_BULLET_DAMAGE * player.mods.shellDamage;
+  const damage = enemyIncomingDamage(target, playerDamage(currentShotDamage * THUNDER_GOD_FOCUS_DAMAGE_MULT, target));
+  target.hp -= damage;
+  target.stun = Math.max(target.stun || 0, 0.12);
+  markHit(target, damage, { x: target.x, y: target.y - 560, kind: "thunderFocus", noKnockback: true });
+  if (storm.strikesLeft % 8 === 0) addSpark(target.x, target.y, "#fff06d", 4);
+  storm.strikesLeft -= 1;
+  return true;
+}
+
 function strikeTazerFocusStorm(storm) {
   const target = enemies.find((enemy) => enemy.id === storm.targetId && enemy.team !== "ally");
   if (!target || target.hp <= 0) return false;
@@ -3001,6 +3110,21 @@ function updateTazerFocusStorms(dt) {
       releaseTazerFocusWave(storm);
       tazerFocusStorms.splice(i, 1);
     }
+  }
+}
+
+function updateThunderFocusStorms(dt) {
+  for (let i = thunderFocusStorms.length - 1; i >= 0; i -= 1) {
+    const storm = thunderFocusStorms[i];
+    storm.timer -= dt;
+    if (storm.timer <= 0 && storm.strikesLeft > 0) {
+      if (!strikeThunderFocusStorm(storm)) {
+        thunderFocusStorms.splice(i, 1);
+        continue;
+      }
+      storm.timer += THUNDER_GOD_FOCUS_INTERVAL;
+    }
+    if (storm.strikesLeft <= 0) thunderFocusStorms.splice(i, 1);
   }
 }
 
@@ -3995,6 +4119,9 @@ function firePlayer(dt, target) {
   player.adultDragonCooldown = Math.max(0, (player.adultDragonCooldown || 0) - dt);
   player.blackDragonCooldown = Math.max(0, (player.blackDragonCooldown || 0) - dt);
   player.gammaStormCooldown = Math.max(0, (player.gammaStormCooldown || 0) - dt);
+  player.thunderBuffCooldown = Math.max(0, (player.thunderBuffCooldown || 0) - dt);
+  player.thunderBuffActive = Math.max(0, (player.thunderBuffActive || 0) - dt);
+  player.thunderFocusCooldown = Math.max(0, (player.thunderFocusCooldown || 0) - dt);
   player.fireShieldCooldown = Math.max(0, (player.fireShieldCooldown || 0) - dt);
   player.fireShieldActive = Math.max(0, (player.fireShieldActive || 0) - dt);
   player.tazerCooldown = Math.max(0, (player.tazerCooldown || 0) - dt);
@@ -4018,6 +4145,12 @@ function firePlayer(dt, target) {
   if (player.tankKey === "gamma" && keys.has("e") && player.gammaStormCooldown <= 0) {
     player.gammaStormCooldown = GAMMA_STORM_COOLDOWN;
     callGammaLightningStorm();
+  }
+  if (isThunderGod() && keys.has("q") && player.thunderBuffCooldown <= 0 && !thunderGodBuffActive()) {
+    startThunderGodBuff();
+  }
+  if (isThunderGod() && keys.has("e") && player.thunderFocusCooldown <= 0) {
+    if (startThunderFocusStorm()) player.thunderFocusCooldown = THUNDER_GOD_FOCUS_COOLDOWN;
   }
   if (player.tankKey === "incendiary" && player.mods?.fireShieldAbility && keys.has("q") && player.fireShieldCooldown <= 0 && !fireShieldActive()) {
     startFireShield();
@@ -4119,6 +4252,12 @@ function firePlayer(dt, target) {
     if (!firing || player.cooldown > 0) return;
     player.cooldown = AIRSTRIKE_COOLDOWN / player.mods.fireRate;
     callAirstrike(target);
+    return;
+  }
+  if (isThunderGod()) {
+    if (!firing || player.cooldown > 0) return;
+    player.cooldown = 0.82 / (player.mods.fireRate * thunderGodStatMult());
+    callThunderAirstrike(target);
     return;
   }
   if (player.tankKey === "trooper") {
@@ -4401,6 +4540,51 @@ function callAirstrike(target) {
     color: "#ffcf5f",
   });
   addSpark(x, y, "#ffcf5f", 8);
+  if (bullets.length > MAX_PLAYER_BULLETS) bullets.splice(0, bullets.length - MAX_PLAYER_BULLETS);
+}
+
+function callThunderAirstrike(target) {
+  const x = clamp(target.x, 60, world.w - 60);
+  const y = clamp(target.y, 60, world.h - 60);
+  const damage = DEFAULT_BULLET_DAMAGE * player.mods.shellDamage;
+  bullets.push({
+    kind: "airstrike",
+    thunderStrike: true,
+    x,
+    y: y - 560,
+    targetX: x,
+    targetY: y,
+    vx: 0,
+    vy: 860 * Math.min(2.4, player.mods.bulletSpeed * thunderGodStatMult()),
+    age: 0,
+    life: 1.05,
+    damage,
+    hp: damage,
+    pierceLeft: 1,
+    hitEnemies: new Set(),
+    r: 8 * player.mods.shellSize * Math.min(1.6, thunderGodStatMult()),
+    gammaLightningDamage: (player.mods.gammaLightningDamage || 1) * Math.sqrt(thunderGodStatMult()),
+    gammaLightningChain: player.mods.gammaLightningChain || 0,
+    gammaLightningRadius: (player.mods.gammaLightningRadius || 1) * Math.min(1.35, thunderGodStatMult()),
+    gammaLightningBurst: (player.mods.gammaLightningBurst || 1) * Math.min(1.35, thunderGodStatMult()),
+    gammaLightningStun: player.mods.gammaLightningStun || 1,
+    color: "#fff06d",
+  });
+  lightning.push({
+    x1: x,
+    y1: Math.max(0, y - 560),
+    x2: x,
+    y2: y,
+    life: 0.18,
+    max: 0.18,
+    color: "#fff06d",
+    large: true,
+    skyStrike: true,
+    width: 8,
+    burst: 48,
+  });
+  addSpark(x, y, "#fff06d", 8);
+  if (lightning.length > MAX_LIGHTNING) lightning.splice(0, lightning.length - MAX_LIGHTNING);
   if (bullets.length > MAX_PLAYER_BULLETS) bullets.splice(0, bullets.length - MAX_PLAYER_BULLETS);
 }
 
@@ -5230,6 +5414,13 @@ function effectText(effect) {
       `${loadout.mods.fireworkFragments} mini-nukes`,
     ];
   }
+  if (effect.variant.toLowerCase().includes("thundergod") || effectFamily === "thunderGodBase") {
+    return [
+      `${(DEFAULT_BULLET_DAMAGE * loadout.mods.shellDamage).toFixed(1)} thunder damage`,
+      `${GAMMA_LIGHTNING_CHAIN_COUNT + Math.round(loadout.mods.gammaLightningChain || 0)} chain jumps`,
+      `${loadout.mods.gammaLightningBurst.toFixed(1)}x strike size`,
+    ];
+  }
   if (effect.variant.toLowerCase().includes("airstrike") || effectFamily === "airstrikeBase") {
     return [
       `${(AIRSTRIKE_COOLDOWN / loadout.mods.fireRate).toFixed(1)} sec call`,
@@ -5445,6 +5636,11 @@ function createVariantLoadout(variant, level = player.level) {
     mods.range = 1.18 + tier * 0.025;
     mods.shellDamage = 50 / DEFAULT_BULLET_DAMAGE;
     mods.shellSize = 1.18;
+    mods.gammaLightningDamage = 1.45;
+    mods.gammaLightningChain = 3;
+    mods.gammaLightningRadius = 1.55;
+    mods.gammaLightningBurst = 1.55;
+    mods.gammaLightningStun = 1.1;
     speed = 188 + tier;
   } else if (variant === "flameBase") {
     mods.flameWidth = 0.95 + tier * 0.04;
@@ -5954,6 +6150,36 @@ function applyEvolutionFormMods(variant, mods, speed) {
     return speed + 4;
   }
 
+  if (has("thundergod")) {
+    mods.shellDamage *= 1.08 + stagePower * 0.08;
+    mods.fireRate *= 1.04 + stagePower * 0.04;
+    mods.bulletSpeed *= 1.04 + stagePower * 0.03;
+    mods.range *= 1.06 + stagePower * 0.035;
+    mods.gammaLightningDamage *= 1.16 + stagePower * 0.1;
+    mods.gammaLightningChain += 1 + Math.floor(stage / 4);
+    mods.gammaLightningRadius *= 1.08 + stagePower * 0.05;
+    mods.gammaLightningBurst *= 1.1 + stagePower * 0.06;
+    mods.gammaLightningStun *= 1.04 + stagePower * 0.02;
+    if (has("stormlord")) {
+      mods.fireRate *= 1.16 + stagePower * 0.04;
+      mods.bulletSpeed *= 1.14;
+      return speed + 10 + stage;
+    }
+    if (has("skybreaker")) {
+      mods.gammaLightningRadius *= 1.24;
+      mods.gammaLightningBurst *= 1.18;
+      mods.gammaLightningChain += 1;
+      return speed + 2;
+    }
+    if (has("judgment")) {
+      mods.shellDamage *= 1.24 + stagePower * 0.08;
+      mods.gammaLightningDamage *= 1.2;
+      mods.fireRate *= 0.9;
+      return speed - 4;
+    }
+    return speed + 4;
+  }
+
   if (has("battery") || has("cyclone") || has("minigun")) {
     mods.bulletCount += Math.floor(stage / 3);
     mods.fireRate *= 1.18 + stagePower * 0.08;
@@ -6135,8 +6361,9 @@ function update(dt) {
   if ((player.stun || 0) <= 0) {
     const stormSpeedMult = tazerStormPenaltyActive() ? 0.5 : 1;
     const juggernautSpeedMult = juggernautPlayerBuffActive() ? JUGGERNAUT_DOMAIN_PLAYER_BUFF : 1;
-    player.x = clamp(player.x + (dx / len) * player.speed * stormSpeedMult * juggernautSpeedMult * dt, 32, world.w - 32);
-    player.y = clamp(player.y + (dy / len) * player.speed * stormSpeedMult * juggernautSpeedMult * dt, 32, world.h - 32);
+    const thunderSpeedMult = thunderGodBuffActive() ? THUNDER_GOD_SPEED_MULT : 1;
+    player.x = clamp(player.x + (dx / len) * player.speed * stormSpeedMult * juggernautSpeedMult * thunderSpeedMult * dt, 32, world.w - 32);
+    player.y = clamp(player.y + (dy / len) * player.speed * stormSpeedMult * juggernautSpeedMult * thunderSpeedMult * dt, 32, world.h - 32);
   }
 
   if (activeGameMode === "infantryArmy") {
@@ -6201,8 +6428,13 @@ function updateBullets(dt) {
       if (b.y >= b.targetY || b.age > b.life) {
         b.x = b.targetX;
         b.y = b.targetY;
-        explodeFireworkBullet(b, "player");
-        addSpark(b.x, b.y, "#ffcf5f", 18);
+        if (b.thunderStrike) {
+          detonateGammaLightning(b, "player");
+          addSpark(b.x, b.y, "#fff06d", 20);
+        } else {
+          explodeFireworkBullet(b, "player");
+          addSpark(b.x, b.y, "#ffcf5f", 18);
+        }
         bullets.splice(i, 1);
       }
       continue;
@@ -6719,6 +6951,7 @@ function updateParticles(dt) {
   updateTazerCannonTraps(dt);
   updateTazerCannonWaves(dt);
   updateTazerFocusStorms(dt);
+  updateThunderFocusStorms(dt);
   if (flames.length > MAX_FLAMES) flames.splice(0, flames.length - MAX_FLAMES);
   for (let i = flames.length - 1; i >= 0; i -= 1) {
     flames[i].life -= dt;
@@ -6807,6 +7040,7 @@ function draw() {
     if (onScreen(enemy, 170)) drawEnemy(enemy);
   });
   drawTank(player, player.color, player.accent, true);
+  if (thunderGodBuffActive()) drawThunderGodBuff();
   if (fireShieldActive()) drawFireShield();
   if (juggernautResolveActive()) drawJuggernautResolve();
   if (player.tankKey === "tazer" && (player.tazerGuardActive || 0) > 0) drawTazerGuard();
@@ -8322,6 +8556,30 @@ function drawJuggernautResolve() {
   ctx.restore();
 }
 
+function drawThunderGodBuff() {
+  const activePct = clamp((player.thunderBuffActive || 0) / THUNDER_GOD_BUFF_DURATION, 0, 1);
+  const pulse = 1 + Math.sin(performance.now() * 0.016) * 0.1;
+  const radius = player.r + 34 * pulse;
+  ctx.save();
+  ctx.globalAlpha = 0.34 + activePct * 0.42;
+  const grad = ctx.createRadialGradient(player.x, player.y, player.r, player.x, player.y, radius + 24);
+  grad.addColorStop(0, "rgba(255,240,109,0.1)");
+  grad.addColorStop(0.55, "rgba(141,245,255,0.24)");
+  grad.addColorStop(1, "rgba(255,240,109,0)");
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, radius + 24, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = "#fff06d";
+  ctx.lineWidth = 4;
+  ctx.setLineDash([10, 8]);
+  ctx.lineDashOffset = -performance.now() * 0.04;
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, radius, 0, TAU);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawFireShield() {
   const t = performance.now() * 0.006;
   const pulse = 1 + Math.sin(t * 1.7) * 0.08;
@@ -8391,6 +8649,8 @@ function drawHud() {
         ? 226
         : player.tankKey === "tazer"
           ? 346
+          : isThunderGod()
+          ? 196
           : player.tankKey === "juggernaut"
             ? 226
             : player.tankKey === "incendiary" && player.mods?.fireShieldAbility
@@ -8421,6 +8681,30 @@ function drawHud() {
     ctx.font = `${12 * camera.scale}px system-ui, sans-serif`;
     const railAbilityText = player.railGiantActive ? "E giant beam active" : player.railGiantArmed ? "E giant beam armed" : "Press E: arm giant beam";
     ctx.fillText(railAbilityText, pad + 16 * camera.scale, pad + 167 * camera.scale);
+    infoY = 172;
+  } else if (isThunderGod()) {
+    bar(
+      pad + 16 * camera.scale,
+      pad + 108 * camera.scale,
+      310 * camera.scale,
+      12 * camera.scale,
+      thunderGodBuffActive() ? (player.thunderBuffActive || 0) / THUNDER_GOD_BUFF_DURATION : 1 - (player.thunderBuffCooldown || 0) / THUNDER_GOD_BUFF_COOLDOWN,
+      "#fff06d",
+      thunderGodBuffActive() ? `Q god mode ${player.thunderBuffActive.toFixed(1)}s` : `Q god mode ${Math.ceil(player.thunderBuffCooldown || 0)}s`
+    );
+    const thunderStorm = thunderFocusStorms[0];
+    bar(
+      pad + 16 * camera.scale,
+      pad + 138 * camera.scale,
+      310 * camera.scale,
+      12 * camera.scale,
+      thunderStorm ? 1 - thunderStorm.strikesLeft / THUNDER_GOD_FOCUS_STRIKES : 1 - (player.thunderFocusCooldown || 0) / THUNDER_GOD_FOCUS_COOLDOWN,
+      "#8df5ff",
+      thunderStorm ? `E judgment ${thunderStorm.strikesLeft} bolts` : `E judgment ${Math.ceil(player.thunderFocusCooldown || 0)}s`
+    );
+    ctx.fillStyle = "#aeb5ad";
+    ctx.font = `${12 * camera.scale}px system-ui, sans-serif`;
+    ctx.fillText("Click: targeted thunder airstrike", pad + 16 * camera.scale, pad + 167 * camera.scale);
     infoY = 172;
   } else if (player.tankKey === "gamma") {
     bar(
