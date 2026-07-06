@@ -1049,6 +1049,17 @@ starters.push(
     perks: { lifeSteal: 0.15 },
   },
   {
+    key: "thunderGod",
+    familyKey: "default",
+    variant: "thunderGodBase",
+    name: "Thunder God",
+    color: "#172a4d",
+    accent: "#fff06d",
+    description: "A divine lightning character with huge health, no regeneration, and brutal 50 damage bolts.",
+    stats: ["1000 HP", "50 base damage", "No regen"],
+    perks: { fixedMaxHp: 1000, noRegen: true },
+  },
+  {
     key: "startJuggernaut",
     familyKey: "juggernaut",
     variant: "defaultJuggernaut",
@@ -1258,6 +1269,7 @@ function enemyStarterOptions() {
       starter.key !== "airstrike" &&
       starter.key !== "helicopter" &&
       starter.key !== "infantry" &&
+      starter.key !== "thunderGod" &&
       starter.key !== "startUltra"
   );
 }
@@ -1373,7 +1385,10 @@ function applyWaveSkip(wave) {
   player.level = wave;
   player.xp = 0;
   player.xpNext = xpNextForLevel(wave);
-  if (!player.lockedTank) {
+  if (player.perks.fixedMaxHp) {
+    player.maxHp = player.perks.fixedMaxHp;
+    player.hp = Math.min(player.hp || player.maxHp, player.maxHp);
+  } else if (!player.lockedTank) {
     player.maxHp = Math.max(1, Math.round(scaledTankMaxHp(wave) * (player.perks.maxHpMult || 1) * (player.maxHpPenaltyMult || 1)));
     player.hp = player.maxHp;
   }
@@ -1388,7 +1403,7 @@ function resetGame(tankKey = "default", mode = selectedGameMode) {
   const skipWave = requestedWaveSkip();
   const starterLoadout = starter.variant ? createVariantLoadout(starter.variant, 1) : null;
   const starterPerks = starter.perks || {};
-  const baseMaxHp = starter.variant === "defaultUltra" ? 100000 : Math.round(100 * (starterPerks.maxHpMult || 1));
+  const baseMaxHp = starter.variant === "defaultUltra" ? 100000 : starterPerks.fixedMaxHp || Math.round(100 * (starterPerks.maxHpMult || 1));
   activeGameMode = mode;
   generateWarMap();
   Object.assign(player, {
@@ -1733,6 +1748,9 @@ function starterWeaponSvg(name, family, mods, accent) {
   if (family === "shotgun") {
     return [-18, -9, 0, 9, 18].map((angle) => `<rect x="12" y="-5" width="54" height="10" rx="5" fill="${accent}" transform="rotate(${angle})"/>`).join("");
   }
+  if (name.includes("Thunder God")) {
+    return `<rect x="12" y="-6" width="58" height="12" rx="6" fill="${accent}"/><path d="M72 -22 L58 0 H78 L62 26" fill="none" stroke="#eaffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }
   if (name.includes("Incendiary") || mods.afterburnDps) {
     return `<rect x="8" y="-15" width="60" height="30" rx="11" fill="${accent}"/><circle cx="76" cy="0" r="12" fill="#ff3d1f"/><path d="M84 -13 C104 -2 102 10 86 18 C92 6 78 3 84 -13 Z" fill="#ffd36d"/>`;
   }
@@ -1761,6 +1779,7 @@ function starterSkinSvg(name, accent) {
   if (name.includes("Rail") || name.includes("Volt")) return `<rect x="-34" y="-30" width="68" height="8" rx="4" fill="#88f7ff"/><rect x="-34" y="22" width="68" height="8" rx="4" fill="#88f7ff"/><circle cx="0" cy="0" r="13" fill="none" stroke="#eaffff" stroke-width="4"/><path d="M-28 -14 H28 M-28 14 H28" stroke="${accent}" stroke-width="4"/>`;
   if (name.includes("Shotgun") || name.includes("Buckshot") || name.includes("Slugstorm") || name.includes("Sweeper")) return `<path d="M-32 -20 H26 L38 0 L26 20 H-32 Z" fill="rgba(255,159,90,0.38)"/><circle cx="-10" cy="0" r="7" fill="#ff9f5a"/><circle cx="10" cy="-8" r="5" fill="#ffd36d"/><circle cx="12" cy="10" r="5" fill="#ffd36d"/>`;
   if (name.includes("Vampire")) return `<circle cx="-10" cy="0" r="6" fill="#ff6f9f"/><circle cx="10" cy="0" r="6" fill="#ff6f9f"/><path d="M-6 14 L0 22 L6 14" fill="none" stroke="#5f001c" stroke-width="3"/>`;
+  if (name.includes("Thunder God")) return `<path d="M-6 -36 L-24 0 H-6 L-18 36 L22 -8 H4 L18 -36 Z" fill="#fff06d"/><circle cx="0" cy="0" r="18" fill="none" stroke="#8df5ff" stroke-width="4"/>`;
   if (name.includes("Juggernaut")) return `<rect x="-48" y="-22" width="7" height="44" fill="#f0d37a"/><rect x="41" y="-22" width="7" height="44" fill="#f0d37a"/><rect x="-22" y="-34" width="44" height="7" fill="#f0d37a"/>`;
   if (name.includes("Incendiary")) return `<path d="M-34 -20 H24 L38 0 L24 20 H-34 Z" fill="rgba(255,123,56,0.4)"/><circle cx="-16" cy="-8" r="5" fill="#ffcf5f"/><circle cx="4" cy="10" r="6" fill="#ff7b38"/><path d="M18 -22 C32 -10 30 8 14 18 C21 4 10 -2 18 -22 Z" fill="#ff3d1f"/>`;
   if (name.includes("Sprinter")) return `<path d="M-42 -25 L-70 -40 L-36 -6 Z M-42 25 L-70 40 L-36 6 Z" fill="#55d6ff"/>`;
@@ -1848,6 +1867,7 @@ function regenDisabledLevel() {
 
 function regenAmount(tank, dt) {
   if (regenDisabledLevel()) return 0;
+  if (tank === player && player.perks.noRegen) return 0;
   if (tank.tankKey === "trooper") return 0;
   if (tank.miniTazer) return 0;
   if (tank.tankKey === "infantry") return tank.maxHp * 0.01 * dt;
@@ -5094,7 +5114,11 @@ function gainXp(amount) {
     const guardActive = player.tankKey === "tazer" && (player.tazerGuardActive || 0) > 0;
     const resolveActive = player.tankKey === "juggernaut" && (player.juggernautResolveActive || 0) > 0;
     const temporaryHpBonus = (player.tazerGuardHpBonus || 0) + (player.juggernautResolveHpBonus || 0);
-    const newBaseMaxHp = player.lockedTank ? Math.max(1, player.maxHp - temporaryHpBonus) : Math.max(1, Math.round(scaledTankMaxHp(player.level) * (player.perks.maxHpMult || 1) * penaltyMult));
+    const newBaseMaxHp = player.perks.fixedMaxHp
+      ? player.perks.fixedMaxHp
+      : player.lockedTank
+        ? Math.max(1, player.maxHp - temporaryHpBonus)
+        : Math.max(1, Math.round(scaledTankMaxHp(player.level) * (player.perks.maxHpMult || 1) * penaltyMult));
     player.tazerGuardHpBonus = guardActive ? Math.max(0, Math.round(newBaseMaxHp * (TAZER_GUARD_TEMP_HP_MULTIPLIER - 1))) : 0;
     player.juggernautResolveHpBonus = resolveActive ? Math.max(1, Math.round(newBaseMaxHp * (JUGGERNAUT_RESOLVE_HP_MULT - 1))) : 0;
     player.maxHp = newBaseMaxHp + player.tazerGuardHpBonus + player.juggernautResolveHpBonus;
@@ -5415,6 +5439,13 @@ function createVariantLoadout(variant, level = player.level) {
     mods.fireRate = 0.85 + tier * 0.04;
     mods.bulletSpeed = 0.9 + tier * 0.03;
     mods.range = 0.95 + tier * 0.03;
+  } else if (variant === "thunderGodBase") {
+    mods.fireRate = 0.72 + tier * 0.025;
+    mods.bulletSpeed = 1.12 + tier * 0.035;
+    mods.range = 1.18 + tier * 0.025;
+    mods.shellDamage = 50 / DEFAULT_BULLET_DAMAGE;
+    mods.shellSize = 1.18;
+    speed = 188 + tier;
   } else if (variant === "flameBase") {
     mods.flameWidth = 0.95 + tier * 0.04;
     mods.range = 0.9 + tier * 0.04;
@@ -7133,6 +7164,23 @@ function drawTankSkin(tank, accentColor) {
     ctx.beginPath();
     ctx.arc(0, 0, 7, 0, TAU);
     ctx.fill();
+  } else if (name.includes("Thunder God")) {
+    ctx.strokeStyle = "rgba(255,240,109,0.88)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-7, -23);
+    ctx.lineTo(-20, 1);
+    ctx.lineTo(-5, 1);
+    ctx.lineTo(-17, 25);
+    ctx.lineTo(20, -8);
+    ctx.lineTo(5, -8);
+    ctx.lineTo(17, -25);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(141,245,255,0.55)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, 24, 0, TAU);
+    ctx.stroke();
   } else if (tank.tankKey === "helicopter") {
     ctx.strokeStyle = "rgba(234,255,255,0.8)";
     ctx.lineWidth = 5;
